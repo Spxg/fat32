@@ -18,8 +18,8 @@ impl Iterator for FindIter {
 
             let at = self.at;
 
-            if self.block[self.at..self.at + 32][0x0B] == 0x0F {
-                let count = self.block[self.at..self.at + 32][0x00] & 0x1F;
+            if item[0x00] != 0xE5 && item[0x0B] == 0x0F {
+                let count = item[0x00] & 0x1F;
                 self.at += 32 * (count + 1) as usize;
             } else {
                 self.at += 32;

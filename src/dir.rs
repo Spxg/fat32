@@ -28,6 +28,10 @@ pub struct Dir<BASE>
 impl<BASE> Dir<BASE>
     where BASE: BasicOperation + Clone + Copy,
           <BASE as BasicOperation>::Error: core::fmt::Debug {
+    // pub fn dir(&self, dir: &str) -> Result<Dir<BASE>, DirError> {
+    //
+    // }
+
     pub fn file(&self, file: &str) -> Result<File<BASE>, DirError> {
         let mut file = file;
 
@@ -46,6 +50,10 @@ impl<BASE> Dir<BASE>
                 if info.1 >= 512 {
                     at = info.1 - 512;
                     break;
+                }
+
+                if info.0[0x00] == 0xE5 {
+                    continue;
                 }
 
                 if info.0[0x0B] == 0x0F {
@@ -71,7 +79,12 @@ impl<BASE> Dir<BASE>
                         }
                     }
                 } else {
-
+                    let file_name = self.get_short_file_name(&info.0);
+                    if let Ok(file_name) = core::str::from_utf8(&file_name.0[0..file_name.1]) {
+                        if file.eq_ignore_ascii_case(file_name) {
+                            return Ok(self.get_file(&info.0));
+                        }
+                    }
                 }
             }
             offset_count += 1;
@@ -124,6 +137,24 @@ impl<BASE> Dir<BASE>
                 | ((buf[0x1D] as u32) << 8)
                 | (buf[0x1C] as u32),
         }
+    }
+
+    fn get_short_file_name(&self, buf: &[u8; 32]) -> ([u8; 13], usize) {
+        let mut file_name = [0; 13];
+        let mut index = 0;
+
+        for i in 0x00..=0x0A {
+            if buf[i] != 0x20 {
+                if i == 0x08 {
+                    file_name[index] = '.' as u8;
+                    index += 1;
+                }
+                file_name[index] = buf[i];
+                index += 1;
+            }
+        }
+
+        (file_name, index)
     }
 
     fn get_long_file_name(&self, buf: &[u8; 32]) -> ([u8; 13 * 3], usize) {
