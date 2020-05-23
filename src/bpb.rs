@@ -19,4 +19,21 @@ impl BIOSParameterBlock {
             + (cluster - 2) * (self.sector_per_cluster as u32))
             * (self.byte_per_sector as u32)
     }
+
+    pub fn fat1(&self) -> u32 {
+        (self.reserved_sector as u32) * (self.byte_per_sector as u32)
+    }
+
+    pub fn get_fat(&self, buf: &[u8; 512]) -> [u32; 128] {
+        let mut clusters = [0; 128];
+
+        for i in (0..512).step_by(4) {
+            let cluster = ((buf[i + 3] as u32) << 24)
+                | ((buf[i + 2] as u32) << 16)
+                | ((buf[i + 1] as u32) << 8)
+                | (buf[i] as u32);
+            clusters[i / 4] = cluster;
+        }
+        clusters
+    }
 }

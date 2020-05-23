@@ -1,6 +1,12 @@
 use crate::base::BasicOperation;
 use crate::bpb::BIOSParameterBlock;
 
+
+#[derive(Debug)]
+pub enum FileError {
+    BufTooSmall
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct File<BASE>
     where BASE: BasicOperation + Clone + Copy,
@@ -22,8 +28,45 @@ pub struct File<BASE>
 impl<BASE> File<BASE>
     where BASE: BasicOperation + Clone + Copy,
           <BASE as BasicOperation>::Error: core::fmt::Debug {
-    pub fn read(&self, buf: &mut [u8]) -> usize {
-        self.base.read(buf, self.bpb.offset(self.file_cluster), (buf.len() / 512) as u32).unwrap();
-        self.length as usize
+    pub fn read(&self, buf: &mut [u8]) -> Result<usize, FileError> {
+        if buf.len() < self.length as usize {
+            return Err(FileError::BufTooSmall);
+        }
+
+        let block = if self.length % 512 == 0 { self.length / 512 } else { self.length / 512 + 1 };
+
+        let mut fat = [0; 512];
+        self.base.read(&mut fat, self.bpb.fat1(), 1).unwrap();
+        let fat = self.bpb.get_fat(&fat);
+
+        if block <= 8 {
+            let remain_bytes = (self.length % (8 * 512)) as usize;
+            let remain_block = if remain_bytes % 512 == 0 { remain_bytes / 512 } else { remain_bytes / 512 + 1 };
+            self.base.read(buf, self.bpb.offset(self.file_cluster), remain_block as u32).unwrap();
+        } else {
+            self.base.read(&mut buf[0..512 * 8], self.bpb.offset(self.file_cluster), 8).unwrap();
+            let mut count = 1;
+
+            for &i in fat[self.file_cluster as usize..].iter() {
+                if i >= 0x0FFFFFF8 && i <= 0x0FFFFFFF {
+                    break;
+                }
+
+                let start_at = count * 512 * 8 as usize;
+                let remain_bytes = self.length as usize - (count * 512) ;
+                let remain_block = if remain_bytes % (8 * 512) == 0 { remain_bytes / 512 } else { remain_bytes / 512 + 1 };
+
+                if remain_bytes < 512 * 8 {
+                    self.base.read(&mut buf[start_at..start_at + 512 * remain_block], self.bpb.offset(i), remain_block as u32).unwrap();
+                } else {
+                    self.base.read(&mut buf[start_at..start_at + 512 * 8],
+                                   self.bpb.offset(i), 8).unwrap();
+                }
+
+                count += 1;
+            }
+        }
+
+        return Ok(self.length as usize);
     }
 }
