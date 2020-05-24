@@ -244,7 +244,7 @@ impl<BASE> Dir<BASE>
 
         let op = |res: &mut ([u8; 13 * 3], usize), start: usize, end: usize| {
             for i in (start..end).step_by(2) {
-                if buf[i] == 0x00 {
+                if buf[i]  == 0x00 && buf[i + 1] == 0x00 {
                     break;
                 }
 
