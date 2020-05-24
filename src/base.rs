@@ -66,7 +66,7 @@ impl<BASE> Volume<BASE>
         Dir::<BASE> {
             base: self.base,
             bpb: self.bpb,
-            dir_name: [0; 8],
+            dir_name: [0; 11],
             create_ms: 0,
             create_time: [0; 2],
             create_date: [0; 2],

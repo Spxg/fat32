@@ -11,50 +11,21 @@ impl Iterator for FindIter {
             Some(([0; 32], self.at))
         } else {
             let mut item = [0; 32];
-
-            if item[0x00] == 0xE5 {
-                self.at += 32;
-            }
-
             for i in self.at..self.at + 32 {
                 item[i - self.at] = self.block[i]
             }
 
-            let at = self.at;
-
-            if item[0x00] != 0xE5 && item[0x0B] == 0x0F {
-                let count = item[0x00] & 0x1F;
-                self.at += 32 * (count + 1) as usize;
-            } else {
+            if item[0x00] == 0xE5 {
                 self.at += 32;
-            }
-
-            Some((item, at))
-        }
-    }
-}
-
-pub struct FindRevIter {
-    pub block: [u8; 512],
-    pub at: usize,
-    pub end: usize,
-}
-
-impl Iterator for FindRevIter {
-    type Item = ([u8; 32], usize);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.at == self.end {
-            None
-        } else {
-            let mut item = [0; 32];
-
-            for i in self.at - 32..self.at {
-                item[i - (self.at - 32)] = self.block[i]
+                for i in self.at..self.at + 32 {
+                    item[i - self.at] = self.block[i]
+                }
+            } else if item[0x00] == 0x00 {
+                return None;
             }
 
             let at = self.at;
-            self.at -= 32;
+            self.at += 32;
 
             Some((item, at))
         }
