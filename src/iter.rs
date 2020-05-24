@@ -12,6 +12,10 @@ impl Iterator for FindIter {
         } else {
             let mut item = [0; 32];
 
+            if item[0x00] == 0xE5 {
+                self.at += 32;
+            }
+
             for i in self.at..self.at + 32 {
                 item[i - self.at] = self.block[i]
             }

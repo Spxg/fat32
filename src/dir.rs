@@ -5,7 +5,7 @@ use crate::iter::{FindIter, FindRevIter};
 
 #[derive(Debug)]
 pub enum DirError {
-    NoMatchFile
+    NoMatch
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -28,12 +28,19 @@ pub struct Dir<BASE>
 impl<BASE> Dir<BASE>
     where BASE: BasicOperation + Clone + Copy,
           <BASE as BasicOperation>::Error: core::fmt::Debug {
-    // pub fn dir(&self, dir: &str) -> Result<Dir<BASE>, DirError> {
-    //
-    // }
-
     pub fn file(&self, file: &str) -> Result<File<BASE>, DirError> {
-        let mut file = file;
+        match self.find(file) {
+            Ok(buf) => {
+                return Ok(self.get_file(&buf));
+            }
+            Err(_) => {
+                Err(DirError::NoMatch)
+            }
+        }
+    }
+
+    fn find(&self, name: &str) -> Result<[u8; 32], DirError> {
+        let mut file = name;
 
         let mut buf = [0; 512];
         let mut offset_count = 0;
@@ -46,22 +53,24 @@ impl<BASE> Dir<BASE>
                 break;
             }
 
-            for info in self.find(buf, at) {
+            for info in self.find_buf(buf, at) {
                 if info.1 >= 512 {
                     at = info.1 - 512;
                     break;
                 }
 
-                if info.0[0x00] == 0xE5 {
-                    continue;
-                }
-
                 if info.0[0x0B] == 0x0F {
                     let count = info.0[0x00] & 0x1F;
-                    let start_at = info.1 + count as usize * 32;
+                    let start_at = info.1 + (count + 1) as usize * 32;
+                    let mut temp = [0; 32];
 
                     for name in (FindRevIter { block: buf, at: start_at, end: info.1 }) {
-                        let part = self.get_long_file_name(&name.0);
+                        if name.1 == start_at {
+                            temp = name.0;
+                            continue;
+                        }
+
+                        let part = self.get_long_name(&name.0);
                         let part_name = core::str::from_utf8(&part.0[0..part.1]).unwrap();
 
                         if part.1 > file.len() {
@@ -75,14 +84,14 @@ impl<BASE> Dir<BASE>
                         }
 
                         if file.len() == 0 {
-                            return Ok(self.get_file(&buf[start_at..start_at + 32]));
+                            return Ok(temp);
                         }
                     }
                 } else {
-                    let file_name = self.get_short_file_name(&info.0);
+                    let file_name = self.get_short_name(&info.0);
                     if let Ok(file_name) = core::str::from_utf8(&file_name.0[0..file_name.1]) {
                         if file.eq_ignore_ascii_case(file_name) {
-                            return Ok(self.get_file(&info.0));
+                            return Ok(info.0);
                         }
                     }
                 }
@@ -90,10 +99,10 @@ impl<BASE> Dir<BASE>
             offset_count += 1;
         }
 
-        Err(DirError::NoMatchFile)
+        Err(DirError::NoMatch)
     }
 
-    fn find(&self, buf: [u8; 512], at: usize) -> FindIter {
+    fn find_buf(&self, buf: [u8; 512], at: usize) -> FindIter {
         FindIter {
             block: buf,
             at,
@@ -139,7 +148,7 @@ impl<BASE> Dir<BASE>
         }
     }
 
-    fn get_short_file_name(&self, buf: &[u8; 32]) -> ([u8; 13], usize) {
+    fn get_short_name(&self, buf: &[u8; 32]) -> ([u8; 13], usize) {
         let mut file_name = [0; 13];
         let mut index = 0;
 
@@ -157,7 +166,7 @@ impl<BASE> Dir<BASE>
         (file_name, index)
     }
 
-    fn get_long_file_name(&self, buf: &[u8; 32]) -> ([u8; 13 * 3], usize) {
+    fn get_long_name(&self, buf: &[u8; 32]) -> ([u8; 13 * 3], usize) {
         let mut res = ([0; 13 * 3], 0);
 
         let op = |res: &mut ([u8; 13 * 3], usize), start: usize, end: usize| {
