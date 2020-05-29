@@ -5,7 +5,15 @@ use crate::iter::FindIter;
 
 #[derive(Debug)]
 pub enum DirError {
-    NoMatch
+    NoMatch,
+    NoMatchDir,
+    NoMatchFile,
+    IllegalName,
+}
+
+enum CreateType {
+    Dir,
+    File
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -31,26 +39,139 @@ impl<BASE> Dir<BASE>
     pub fn into_dir(&self, dir: &str) -> Result<Dir<BASE>, DirError> {
         match self.find(dir) {
             Ok(buf) => {
-                return Ok(self.get_dir(&buf));
+                return Ok(self.get_dir(&buf.0));
             }
             Err(_) => {
-                Err(DirError::NoMatch)
+                Err(DirError::NoMatchDir)
             }
         }
+    }
+
+    pub fn create_dir(&self, dir: &str, time: &str) -> Result<(), DirError> {
+        self.create(dir, time, CreateType::Dir)?;
+        Ok(())
+    }
+
+    pub fn create_file(&self, file: &str, time: &str) -> Result<(), DirError> {
+        self.create(file, time, CreateType::File)?;
+        Ok(())
+    }
+
+    fn create(&self, name: &str, time: &str, create_type: CreateType) -> Result<(), DirError> {
+        let illegal_char = "\\/:*?\"<>|";
+        for ch in illegal_char.chars() {
+            if name.contains(ch) {
+                return Err(DirError::IllegalName);
+            }
+        }
+
+        let fat_addr = self.get_blank_fat();
+        let place = self.get_blank_place();
+        let fat = fat_addr / 4;
+        let place_index = place % 512;
+        let offset = place - place_index;
+
+        if name.is_ascii() && !name.contains(' ') && name.len() <= 8 {
+            let mut buf = [0; 512];
+            let high = fat & 0xFF00 >> 16;
+            let low = fat & 0x00FF;
+
+            self.base.read(&mut buf, self.bpb.offset(self.dir_cluster) + offset as u32
+                           , 1).unwrap();
+
+            for ch in name.chars().enumerate() {
+                buf[ch.0 + place_index] = ch.1.to_ascii_uppercase() as u8;
+            }
+
+            for blank in name.len()..11 {
+                buf[blank + place_index] = 0x20;
+            }
+
+            match create_type {
+                CreateType::Dir => {
+                    buf[0x0B + place_index] = 0x10;
+                }
+                CreateType::File => {
+                    buf[0x0B + place_index] = 0x20;
+                }
+            }
+
+            buf[0x0C + place_index] = 0x18;
+            buf[0x14 + place_index] = (high & 0x0F) as u8;
+            buf[0x15 + place_index] = (high & 0xF0 >> 8) as u8;
+            buf[0x1A + place_index] = (low & 0x0F) as u8;
+            buf[0x1B + place_index] = (low & 0xF0 >> 8) as u8;
+            self.write_fat(fat_addr);
+            self.base.write(&buf, self.bpb.offset(self.dir_cluster) + offset as u32
+                            , 1).unwrap();
+        }
+
+        Ok(())
+    }
+
+    fn write_fat(&self, fat_addr: usize) {
+        let fat_index = fat_addr % 512;
+        let offset = fat_addr - fat_index;
+        let mut buf = [0; 512];
+
+        self.base.read(&mut buf, self.bpb.fat1() + offset as u32, 1).unwrap();
+        buf[fat_index] = 0xFF;
+        buf[fat_index + 1] = 0xFF;
+        buf[fat_index + 2] = 0xFF;
+        buf[fat_index + 3] = 0x0F;
+        self.base.write(&buf, self.bpb.fat1() + offset as u32, 1).unwrap();
+    }
+
+    fn get_blank_place(&self) -> usize {
+        let addr = self.bpb.offset(self.dir_cluster);
+        let mut offset = 0;
+        for _ in 0.. {
+            let mut done = false;
+            let mut buf = [0; 512];
+            self.base.read(&mut buf, addr + offset as u32, 1).unwrap();
+            for i in (0..512).step_by(32) {
+                if buf[i] == 0x00 {
+                    offset += i;
+                    done = true;
+                    break;
+                }
+            }
+            if done { break; } else { offset += 512; }
+        }
+        offset
+    }
+
+    fn get_blank_fat(&self) -> usize {
+        let fat_addr = self.bpb.fat1();
+        let mut offset = 0;
+        for _ in 0.. {
+            let mut done = false;
+            let mut buf = [0; 512];
+            self.base.read(&mut buf, fat_addr + offset as u32, 1).unwrap();
+            for i in (0..512).step_by(4) {
+                if buf[i] == 0x00 {
+                    offset += i;
+                    done = true;
+                    break;
+                }
+            }
+            if done { break; } else { offset += 512; }
+        }
+        offset
     }
 
     pub fn file(&self, file: &str) -> Result<File<BASE>, DirError> {
         match self.find(file) {
             Ok(buf) => {
-                return Ok(self.get_file(&buf));
+                return Ok(self.get_file(&buf.0, buf.1));
             }
             Err(_) => {
-                Err(DirError::NoMatch)
+                Err(DirError::NoMatchFile)
             }
         }
     }
 
-    fn find(&self, name: &str) -> Result<[u8; 32], DirError> {
+    pub fn find(&self, name: &str) -> Result<([u8; 32], u32), DirError> {
         let mut buf = [0; 512];
         let mut offset_count = 0;
         let mut at = 0;
@@ -87,7 +208,7 @@ impl<BASE> Dir<BASE>
                 }
 
                 if cmp_done {
-                    return Ok(info.0);
+                    return Ok((info.0, offset_count * 512 + info.1 as u32));
                 }
 
                 if info.0[0x0B] == 0x0F {
@@ -132,13 +253,12 @@ impl<BASE> Dir<BASE>
                     let file_name = self.get_short_name(&info.0);
                     if let Ok(file_name) = core::str::from_utf8(&file_name.0[0..file_name.1]) {
                         if name.eq_ignore_ascii_case(file_name) {
-                            return Ok(info.0);
+                            return Ok((info.0, offset_count * 512 + info.1 as u32));
                         }
                     }
                 }
             }
         }
-
         Err(DirError::NoMatch)
     }
 
@@ -182,7 +302,7 @@ impl<BASE> Dir<BASE>
         }
     }
 
-    fn get_file(&self, buf: &[u8]) -> File<BASE> {
+    fn get_file(&self, buf: &[u8], offset: u32) -> File<BASE> {
         let mut file_name = [0; 8];
         let mut extension_name = [0; 3];
         let create_time = [buf[0x0F], buf[0x0E]];
@@ -191,17 +311,31 @@ impl<BASE> Dir<BASE>
         let edit_time = [buf[0x17], buf[0x16]];
         let edit_date = [buf[0x19], buf[0x18]];
 
+        let mut index = 0;
         for i in 0x00..0x08 {
-            file_name[i] = buf[i];
+            if buf[i] != 0x20 {
+                file_name[index] = buf[i];
+                index += 1;
+            } else {
+                break;
+            }
         }
 
+        index = 0;
         for i in 0x08..0x0B {
-            extension_name[i - 0x08] = buf[i];
+            if buf[i] != 0x20 {
+                extension_name[index] = buf[i];
+                index += 1;
+            } else {
+                break;
+            }
         }
 
         File::<BASE> {
             base: self.base,
             bpb: self.bpb,
+            dir_cluster: self.dir_cluster,
+            offset,
             file_name,
             extension_name,
             create_ms: buf[0x0D],
@@ -244,7 +378,7 @@ impl<BASE> Dir<BASE>
 
         let op = |res: &mut ([u8; 13 * 3], usize), start: usize, end: usize| {
             for i in (start..end).step_by(2) {
-                if buf[i]  == 0x00 && buf[i + 1] == 0x00 {
+                if buf[i] == 0x00 && buf[i + 1] == 0x00 {
                     break;
                 }
 
