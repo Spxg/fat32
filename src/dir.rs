@@ -67,7 +67,7 @@ impl<BASE> Dir<BASE>
 
         let fat_addr = self.get_blank_fat();
         let place = self.get_blank_place();
-        let fat = fat_addr / 4;
+        let fat = fat_addr % 512 / 4;
         let place_index = place % 512;
         let offset = place - place_index;
 
@@ -101,7 +101,8 @@ impl<BASE> Dir<BASE>
             buf[0x15 + place_index] = (high & 0xF0 >> 8) as u8;
             buf[0x1A + place_index] = (low & 0x0F) as u8;
             buf[0x1B + place_index] = (low & 0xF0 >> 8) as u8;
-            self.write_fat(fat_addr);
+
+            self.edit_fat(fat as u32, 0x0FFFFFFF);
             self.base.write(&buf, self.bpb.offset(self.dir_cluster) + offset as u32
                             , 1).unwrap();
         }
@@ -109,17 +110,21 @@ impl<BASE> Dir<BASE>
         Ok(())
     }
 
-    fn write_fat(&self, fat_addr: usize) {
-        let fat_index = fat_addr % 512;
-        let offset = fat_addr - fat_index;
-        let mut buf = [0; 512];
+    fn edit_fat(&self, loc: u32, value: u32) {
+        let fat_addr = self.bpb.fat1();
+        let offset = loc * 4;
+        let offset_count = offset / 512;
+        let offset = (offset % 512) as usize;
 
-        self.base.read(&mut buf, self.bpb.fat1() + offset as u32, 1).unwrap();
-        buf[fat_index] = 0xFF;
-        buf[fat_index + 1] = 0xFF;
-        buf[fat_index + 2] = 0xFF;
-        buf[fat_index + 3] = 0x0F;
-        self.base.write(&buf, self.bpb.fat1() + offset as u32, 1).unwrap();
+        let mut buf = [0; 512];
+        self.base.read(&mut buf, fat_addr + offset_count * 512, 1).unwrap();
+
+        buf[offset] = (value & 0xFF) as u8;
+        buf[offset + 1] = ((value & 0xFF00) >> 8) as u8;
+        buf[offset + 2] = ((value & 0xFF0000) >> 16) as u8;
+        buf[offset + 3] = ((value & 0xFF00000) >> 24) as u8;
+
+        self.base.write(&buf, fat_addr + offset_count * 512, 1).unwrap();
     }
 
     fn get_blank_place(&self) -> usize {
@@ -149,7 +154,7 @@ impl<BASE> Dir<BASE>
             let mut buf = [0; 512];
             self.base.read(&mut buf, fat_addr + offset as u32, 1).unwrap();
             for i in (0..512).step_by(4) {
-                if buf[i] == 0x00 {
+                if (buf[i] as u32 + buf[i + 1] as u32 + buf[i + 2] as u32 + buf[i + 3] as u32) == 0 {
                     offset += i;
                     done = true;
                     break;
@@ -331,6 +336,17 @@ impl<BASE> Dir<BASE>
             }
         }
 
+        let mut file_cluster = ((buf[0x15] as u32) << 24)
+            | ((buf[0x14] as u32) << 16)
+            | ((buf[0x1B] as u32) << 8)
+            | (buf[0x1A] as u32);
+
+        if file_cluster == 0 {
+            let fat_addr = self.get_blank_fat();
+            file_cluster = (fat_addr % 512 / 4) as u32;
+            self.edit_fat(file_cluster, 0x0FFFFFFF);
+        }
+
         File::<BASE> {
             base: self.base,
             bpb: self.bpb,
@@ -344,10 +360,7 @@ impl<BASE> Dir<BASE>
             visit_date: last_visit_date,
             edit_time,
             edit_date,
-            file_cluster: ((buf[0x15] as u32) << 24)
-                | ((buf[0x14] as u32) << 16)
-                | ((buf[0x1B] as u32) << 8)
-                | (buf[0x1A] as u32),
+            file_cluster,
             length: ((buf[0x1F] as u32) << 24)
                 | ((buf[0x1E] as u32) << 16)
                 | ((buf[0x1D] as u32) << 8)
