@@ -1,7 +1,5 @@
 use crate::base::BasicOperation;
 use crate::bpb::BIOSParameterBlock;
-use crate::dir::Dir;
-
 
 #[derive(Debug)]
 pub enum FileError {
@@ -154,7 +152,7 @@ impl<BASE> File<BASE>
             let mut buf = [0; 512];
             self.base.read(&mut buf, fat_addr + offset as u32, 1).unwrap();
             for i in (0..512).step_by(4) {
-                if (buf[i] as u32 + buf[i + 1] as u32 + buf[i + 2] as u32 + buf[i + 3] as u32) == 0 {
+                if (buf[i] | buf[i + 1] | buf[i + 2] | buf[i + 3]) == 0 {
                     offset += i;
                     done = true;
                     break;
