@@ -15,6 +15,11 @@ enum CreateType {
     File,
 }
 
+enum NameType {
+    Short,
+    Long
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct Dir<BASE>
     where BASE: BasicOperation + Clone + Copy,
@@ -75,52 +80,69 @@ impl<BASE> Dir<BASE>
             }
         }
 
+        let mut buf = [0; 512];
+        let name_type = self.short_or_long(name);
+        let short_name = self.generate_short_name(name);
+        let len = name.chars().count();
+        let mut copy_name = name;
+
         let fat_addr = self.get_blank_fat();
-        let place = self.get_blank_place();
         let fat = fat_addr % 512 / 4;
-        let place_index = place % 512;
-        let offset = place - place_index;
 
-        if name.is_ascii() && !name.contains(' ') && name.len() <= 8 {
-            let mut buf = [0; 512];
-            let high = fat & 0xFF00 >> 16;
-            let low = fat & 0x00FF;
-
-            self.base.read(&mut buf, self.bpb.offset(self.dir_cluster) + offset as u32
-                           , 1).unwrap();
-
-            for ch in name.chars().enumerate() {
-                buf[ch.0 + place_index] = ch.1.to_ascii_uppercase() as u8;
+        let times = match name_type {
+            NameType::Short => { 0 }
+            NameType::Long => {
+                if len % 13 == 0 { len / 13 } else { len / 13 + 1 }
             }
+        };
 
-            for blank in name.len()..11 {
-                buf[blank + place_index] = 0x20;
-            }
+        for i in 0..=times {
+            let place = self.get_blank_place();
+            let place_index = place % 512;
+            let offset = place - place_index;
+            let muilt = if len % 13 == 0 { len / 13 - 1 } else { len / 13 };
+            let start_at = if len <= 13 { 0 } else { self.get_slice_index(copy_name, 13 * muilt) };
+            self.base.read(&mut buf, self.bpb.offset(self.dir_cluster) + offset as u32, 1).unwrap();
 
-            match create_type {
-                CreateType::Dir => {
-                    buf[0x0B + place_index] = 0x10;
+            if i != times {
+                let flag = if i == 0 { (0b1000000 | times) as u8 } else { (times - i) as u8 };
+                buf[0x00 + place_index] = flag;
+                buf[0x0D + place_index] = self.generate_chksum(&short_name);
+                self.write_unicode(&copy_name[start_at..], &mut buf, place_index);
+            } else {
+                let high = fat & 0xFF00 >> 16;
+                let low = fat & 0x00FF;
+
+                for i in 0x00..=0x0A {
+                    buf[i + place_index] = short_name[i];
                 }
-                CreateType::File => {
-                    buf[0x0B + place_index] = 0x20;
+
+                match create_type {
+                    CreateType::Dir => {
+                        buf[0x0B + place_index] = 0x10;
+                    }
+                    CreateType::File => {
+                        buf[0x0B + place_index] = 0x20;
+                    }
                 }
+
+                buf[0x0C + place_index] = 0x18;
+                buf[0x14 + place_index] = (high & 0x0F) as u8;
+                buf[0x15 + place_index] = (high & 0xF0 >> 8) as u8;
+                buf[0x1A + place_index] = (low & 0x0F) as u8;
+                buf[0x1B + place_index] = (low & 0xF0 >> 8) as u8;
+
+                self.edit_fat(fat as u32, 0x0FFFFFFF);
             }
 
-            buf[0x0C + place_index] = 0x18;
-            buf[0x14 + place_index] = (high & 0x0F) as u8;
-            buf[0x15 + place_index] = (high & 0xF0 >> 8) as u8;
-            buf[0x1A + place_index] = (low & 0x0F) as u8;
-            buf[0x1B + place_index] = (low & 0xF0 >> 8) as u8;
-
-            self.edit_fat(fat as u32, 0x0FFFFFFF);
             self.base.write(&buf, self.bpb.offset(self.dir_cluster) + offset as u32
-                            , 1).unwrap();
+                            ,1).unwrap();
+            copy_name = &copy_name[start_at..];
         }
-
         Ok(())
     }
 
-    fn exist(&self, name: &str) -> Result<([u8; 32], u32), DirError> {
+    pub fn exist(&self, name: &str) -> Result<([u8; 32], u32), DirError> {
         let illegal_char = "\\/:*?\"<>|";
         for ch in illegal_char.chars() {
             if name.contains(ch) {
@@ -128,6 +150,7 @@ impl<BASE> Dir<BASE>
             }
         }
 
+        let name_type = self.short_or_long(name);
         let op = |buf: &[u8]| -> [u8; 32] {
             let mut temp = [0; 32];
             for i in 0..32 {
@@ -136,17 +159,6 @@ impl<BASE> Dir<BASE>
             temp
         };
 
-        let get_slice_index = |name: &str, end: usize| -> usize {
-            let mut len = 0;
-            for ch in name.chars().enumerate() {
-                if (0..end).contains(&ch.0) {
-                    len += ch.1.len_utf8();
-                }
-            }
-            len
-        };
-
-        let is_short_name = name.is_ascii() && !name.contains(' ') && name.len() <= 8;
         let mut buf = [0; 512];
         let mut offset_count = 0;
         let mut step_count = 0;
@@ -171,28 +183,32 @@ impl<BASE> Dir<BASE>
 
             if buf[0x00 + offset] == 0xE5 { continue; }
             if buf[0x0B + offset] == 0x0F {
-                if is_short_name {
-                    step_count = buf[0x00 + offset] & 0x1F;
-                    continue;
-                } else {
-                    let len = copy_name.chars().count();
-                    let count = buf[0x00 + offset] & 0x1F;
-                    let info = self.get_long_name(&buf[offset..offset + 32]);
-                    let part_name = core::str::from_utf8(&info.0[0..info.1]).unwrap();
-                    let start_at = if len <= 13 { 0 } else { get_slice_index(copy_name, 13) };
-
-                    if !&copy_name[start_at..].eq(part_name) {
-                        copy_name = name;
-                        step_count = count;
+                match name_type {
+                    NameType::Short => {
+                        step_count = buf[0x00 + offset] & 0x1F;
                         continue;
-                    } else if start_at == 0 && count == 1 {
-                        long_cmp_done = true;
-                    } else {
-                        copy_name = &copy_name[0..start_at];
+                    },
+                    NameType::Long => {
+                        let len = copy_name.chars().count();
+                        let count = buf[0x00 + offset] & 0x1F;
+                        let info = self.get_long_name(&buf[offset..offset + 32]);
+                        let part_name = core::str::from_utf8(&info.0[0..info.1]).unwrap();
+                        let muilt = if len % 13 == 0 { len / 13 - 1 } else { len / 13 };
+                        let start_at = if len <= 13 { 0 } else { self.get_slice_index(copy_name, 13 * muilt) };
+
+                        if !&copy_name[start_at..].eq(part_name) {
+                            copy_name = name;
+                            step_count = count;
+                            continue;
+                        } else if start_at == 0 && count == 1 {
+                            long_cmp_done = true;
+                        } else {
+                            copy_name = &copy_name[0..start_at];
+                        }
                     }
                 }
             } else {
-                if is_short_name {
+                if let NameType::Short = name_type {
                     let info = self.get_short_name(&buf[offset..offset + 32]);
                     let file_name = core::str::from_utf8(&info.0[0..info.1]).unwrap();
                     if name.eq_ignore_ascii_case(file_name) {
@@ -203,6 +219,105 @@ impl<BASE> Dir<BASE>
         }
 
         Err(DirError::NoMatch)
+    }
+
+    fn generate_chksum(&self, name: &[u8]) -> u8 {
+        let mut chksum= 0;
+        for i in 0..11 {
+            chksum = if chksum & 1 != 0 { 0x80 } else { 0 } + (chksum >> 1) + name[i];
+        }
+        chksum
+    }
+
+    fn generate_short_name(&self, name: &str) -> [u8; 11] {
+        let mut temp = [0x20; 11];
+        let name_type = self.short_or_long(name);
+        match name_type {
+            NameType::Short => {
+                let mut index = 0;
+                for i in name.chars().enumerate() {
+                    if i.1 == '.' {
+                        index = 0x08;
+                        continue;
+                    }
+                    if i.1 == ' ' {
+                        continue;
+                    } else {
+                        temp[index] = i.1.to_ascii_uppercase() as u8;
+                        index += 1;
+                    }
+                }
+            }
+            NameType::Long => {
+
+            }
+        }
+
+        temp
+    }
+
+    fn short_or_long(&self, name: &str) -> NameType {
+        let part = match name.find('.') {
+            Some(i) => {
+                (&name[0..i], &name[i + 1..])
+            },
+            None => {
+                (&name[0..], "")
+            }
+        };
+
+        if name.is_ascii() && !name.contains(' ') && part.0.len() <= 8 && part.1.len() <= 3 {
+            NameType::Short
+        } else {
+            NameType::Long
+        }
+    }
+
+    fn write_unicode(&self, name: &str, buf: &mut [u8], offset: usize) {
+        let mut temp = [0xFF; 26];
+        let mut index = 0;
+
+        for i in name.encode_utf16() {
+            let part1 = (i & 0xFF) as u8;
+            let part2 = ((i & 0xFF00) >> 8) as u8;
+            temp[index] = part1;
+            temp[index + 1] = part2;
+            index += 2;
+        }
+
+        if index != 26 {
+            temp[index] = 0;
+            temp[index + 1] = 0;
+        }
+        index = 0;
+
+        for i in (0x01..0x0A).step_by(2) {
+            buf[offset + i] = temp[index];
+            buf[offset + i + 1] = temp[index + 1];
+            index += 2;
+        }
+
+        for i in (0x0E..0x19).step_by(2) {
+            buf[offset + i] = temp[index];
+            buf[offset + i + 1] = temp[index + 1];
+            index += 2;
+        }
+
+        for i in (0x1C..0x1F).step_by(2) {
+            buf[offset + i] = temp[index];
+            buf[offset + i + 1] = temp[index + 1];
+            index += 2;
+        }
+    }
+
+    fn get_slice_index(&self, name: &str, end: usize) -> usize {
+        let mut len = 0;
+        for ch in name.chars().enumerate() {
+            if (0..end).contains(&ch.0) {
+                len += ch.1.len_utf8();
+            }
+        }
+        len
     }
 
     fn edit_fat(&self, loc: u32, value: u32) {
@@ -225,9 +340,10 @@ impl<BASE> Dir<BASE>
     fn get_blank_place(&self) -> usize {
         let addr = self.bpb.offset(self.dir_cluster);
         let mut offset = 0;
+        let mut buf = [0; 512];
+
         for _ in 0.. {
             let mut done = false;
-            let mut buf = [0; 512];
             self.base.read(&mut buf, addr + offset as u32, 1).unwrap();
             for i in (0..512).step_by(32) {
                 if buf[i] == 0x00 {
@@ -244,9 +360,10 @@ impl<BASE> Dir<BASE>
     fn get_blank_fat(&self) -> usize {
         let fat_addr = self.bpb.fat1();
         let mut offset = 0;
+        let mut buf = [0; 512];
+
         for _ in 0.. {
             let mut done = false;
-            let mut buf = [0; 512];
             self.base.read(&mut buf, fat_addr + offset as u32, 1).unwrap();
             for i in (0..512).step_by(4) {
                 if (buf[i] | buf[i + 1] | buf[i + 2] | buf[i + 3]) == 0 {
