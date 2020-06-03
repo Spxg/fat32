@@ -1,8 +1,6 @@
 # fat32
 
-This is a simple fat32 filesystem library, which is `#![no_std]` and does not use `alloc`.
-This is a personal project, your issues may not be resolved in time
-Only test sdhc card with [sdio_sdhc](https://github.com/play-stm32/sdio_sdhc)
+This is a simple fat32 filesystem library, which is `#![no_std]` and does not use `alloc`. Only test sdhc card with [sdio_sdhc](https://github.com/play-stm32/sdio_sdhc). This is a personal project, your issues may not be resolved in time.
 
 ## Support 
 * create file and dir
