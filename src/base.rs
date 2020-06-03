@@ -1,5 +1,6 @@
 use crate::bpb::BIOSParameterBlock;
 use crate::dir::Dir;
+use crate::BUFFER_SIZE;
 
 pub trait BasicOperation {
     type Error;
@@ -20,7 +21,7 @@ impl<BASE> Volume<BASE>
     where BASE: BasicOperation + Clone + Copy,
           <BASE as BasicOperation>::Error: core::fmt::Debug {
     pub fn new(base: BASE) -> Volume<BASE> {
-        let mut buf = [0; 512];
+        let mut buf = [0; BUFFER_SIZE];
         base.read(&mut buf, 0, 1).unwrap();
 
         let mut volume_label = [0; 11];

@@ -1,6 +1,7 @@
 use crate::base::BasicOperation;
 use crate::bpb::BIOSParameterBlock;
 use crate::file::File;
+use crate::BUFFER_SIZE;
 
 #[derive(Debug)]
 pub enum DirError {
@@ -8,6 +9,8 @@ pub enum DirError {
     NoMatchDir,
     NoMatchFile,
     IllegalName,
+    DirHasExist,
+    FileHasExist,
 }
 
 enum CreateType {
@@ -17,24 +20,24 @@ enum CreateType {
 
 enum NameType {
     Short,
-    Long
+    Long,
 }
 
 #[derive(Debug, Copy, Clone)]
 pub struct Dir<BASE>
     where BASE: BasicOperation + Clone + Copy,
           <BASE as BasicOperation>::Error: core::fmt::Debug {
-    pub base: BASE,
-    pub bpb: BIOSParameterBlock,
-    pub dir_name: [u8; 11],
-    pub create_ms: u8,
-    pub create_time: [u8; 2],
-    pub create_date: [u8; 2],
-    pub visit_date: [u8; 2],
-    pub edit_time: [u8; 2],
-    pub edit_date: [u8; 2],
-    pub dir_cluster: u32,
-    pub length: u32,
+    pub(crate) base: BASE,
+    pub(crate) bpb: BIOSParameterBlock,
+    pub(crate) dir_name: [u8; 11],
+    pub(crate) create_ms: u8,
+    pub(crate) create_time: [u8; 2],
+    pub(crate) create_date: [u8; 2],
+    pub(crate) visit_date: [u8; 2],
+    pub(crate) edit_time: [u8; 2],
+    pub(crate) edit_date: [u8; 2],
+    pub(crate) dir_cluster: u32,
+    pub(crate) length: u32,
 }
 
 impl<BASE> Dir<BASE>
@@ -51,7 +54,7 @@ impl<BASE> Dir<BASE>
         }
     }
 
-    pub fn file(&self, file: &str) -> Result<File<BASE>, DirError> {
+    pub fn load_file(&self, file: &str) -> Result<File<BASE>, DirError> {
         match self.exist(file) {
             Ok(buf) => {
                 return Ok(self.get_file(&buf.0, buf.1));
@@ -62,17 +65,23 @@ impl<BASE> Dir<BASE>
         }
     }
 
-    pub fn create_dir(&self, dir: &str, time: &str) -> Result<(), DirError> {
-        self.create(dir, time, CreateType::Dir)?;
+    pub fn create_dir(&self, dir: &str) -> Result<(), DirError> {
+        if let Ok(_) = self.exist(dir) {
+            return Err(DirError::DirHasExist);
+        }
+        self.create(dir, CreateType::Dir)?;
         Ok(())
     }
 
-    pub fn create_file(&self, file: &str, time: &str) -> Result<(), DirError> {
-        self.create(file, time, CreateType::File)?;
+    pub fn create_file(&self, file: &str) -> Result<(), DirError> {
+        if let Ok(_) = self.exist(file) {
+            return Err(DirError::FileHasExist);
+        }
+        self.create(file, CreateType::File)?;
         Ok(())
     }
 
-    fn create(&self, name: &str, time: &str, create_type: CreateType) -> Result<(), DirError> {
+    fn create(&self, name: &str, create_type: CreateType) -> Result<(), DirError> {
         let illegal_char = "\\/:*?\"<>|";
         for ch in illegal_char.chars() {
             if name.contains(ch) {
@@ -80,14 +89,17 @@ impl<BASE> Dir<BASE>
             }
         }
 
-        let mut buf = [0; 512];
-        let name_type = self.short_or_long(name);
-        let short_name = self.generate_short_name(name);
+        let bps = self.bpb.byte_per_sector as usize;
+
+        let mut buf = [0; BUFFER_SIZE];
         let len = name.chars().count();
         let mut copy_name = name;
 
         let fat_addr = self.get_blank_fat();
-        let fat = fat_addr % 512 / 4;
+        let fat = fat_addr % bps / 4;
+        let name_type = self.short_or_long(name);
+        let short_name = self.generate_short_name(name, fat);
+        let chksum = self.generate_chksum(&short_name);
 
         let times = match name_type {
             NameType::Short => { 0 }
@@ -97,17 +109,19 @@ impl<BASE> Dir<BASE>
         };
 
         for i in 0..=times {
+            let len = copy_name.chars().count();
             let place = self.get_blank_place();
-            let place_index = place % 512;
+            let place_index = place % bps;
             let offset = place - place_index;
-            let muilt = if len % 13 == 0 { len / 13 - 1 } else { len / 13 };
+            let muilt = if len % 13 == 0 { if len != 0 { len / 13 - 1 } else { 0 } } else { len / 13 };
             let start_at = if len <= 13 { 0 } else { self.get_slice_index(copy_name, 13 * muilt) };
             self.base.read(&mut buf, self.bpb.offset(self.dir_cluster) + offset as u32, 1).unwrap();
 
             if i != times {
                 let flag = if i == 0 { (0b1000000 | times) as u8 } else { (times - i) as u8 };
                 buf[0x00 + place_index] = flag;
-                buf[0x0D + place_index] = self.generate_chksum(&short_name);
+                buf[0x0B + place_index] = 0x0F;
+                buf[0x0D + place_index] = chksum;
                 self.write_unicode(&copy_name[start_at..], &mut buf, place_index);
             } else {
                 let high = fat & 0xFF00 >> 16;
@@ -136,8 +150,8 @@ impl<BASE> Dir<BASE>
             }
 
             self.base.write(&buf, self.bpb.offset(self.dir_cluster) + offset as u32
-                            ,1).unwrap();
-            copy_name = &copy_name[start_at..];
+                            , 1).unwrap();
+            copy_name = &copy_name[..start_at];
         }
         Ok(())
     }
@@ -150,6 +164,8 @@ impl<BASE> Dir<BASE>
             }
         }
 
+        let bps = self.bpb.byte_per_sector as usize;
+
         let name_type = self.short_or_long(name);
         let op = |buf: &[u8]| -> [u8; 32] {
             let mut temp = [0; 32];
@@ -159,15 +175,15 @@ impl<BASE> Dir<BASE>
             temp
         };
 
-        let mut buf = [0; 512];
+        let mut buf = [0; BUFFER_SIZE];
         let mut offset_count = 0;
         let mut step_count = 0;
         let mut copy_name = name;
         let mut long_cmp_done = false;
 
         for i in (0..).step_by(32) {
-            if i % 512 == 0 {
-                self.base.read(&mut buf, self.bpb.offset(self.dir_cluster) + offset_count * 512
+            if i % BUFFER_SIZE == 0 {
+                self.base.read(&mut buf, self.bpb.offset(self.dir_cluster) + offset_count * (bps as u32)
                                , 1).unwrap();
                 offset_count += 1;
             }
@@ -177,7 +193,7 @@ impl<BASE> Dir<BASE>
                 continue;
             }
 
-            let offset = i - (offset_count as usize - 1) * 512;
+            let offset = i - (offset_count as usize - 1) * bps;
             if buf[0x00 + offset] == 0x00 { break; }
             if long_cmp_done { return Ok((op(&buf[offset..offset + 32]), i as u32)); }
 
@@ -187,7 +203,7 @@ impl<BASE> Dir<BASE>
                     NameType::Short => {
                         step_count = buf[0x00 + offset] & 0x1F;
                         continue;
-                    },
+                    }
                     NameType::Long => {
                         let len = copy_name.chars().count();
                         let count = buf[0x00 + offset] & 0x1F;
@@ -222,15 +238,25 @@ impl<BASE> Dir<BASE>
     }
 
     fn generate_chksum(&self, name: &[u8]) -> u8 {
-        let mut chksum= 0;
-        for i in 0..11 {
-            chksum = if chksum & 1 != 0 { 0x80 } else { 0 } + (chksum >> 1) + name[i];
+        let mut chksum = 0;
+        for &i in name {
+            chksum = (if chksum & 1 == 1 { 0x80 } else { 0 } + (chksum >> 1) + i as u32) & 0xFF;
         }
-        chksum
+        chksum as u8
     }
 
-    fn generate_short_name(&self, name: &str) -> [u8; 11] {
+    fn generate_short_name(&self, name: &str, fat: usize) -> [u8; 11] {
         let mut temp = [0x20; 11];
+
+        let part = match name.find('.') {
+            Some(i) => {
+                &name[i + 1..]
+            }
+            None => {
+                ""
+            }
+        };
+
         let name_type = self.short_or_long(name);
         match name_type {
             NameType::Short => {
@@ -249,7 +275,41 @@ impl<BASE> Dir<BASE>
                 }
             }
             NameType::Long => {
+                for i in name.chars().enumerate() {
+                    if i.0 == 0 || i.0 == 1 {
+                        if !i.1.is_ascii() {
+                            let mut t = [0; 1];
+                            let res = i.1.encode_utf16(&mut t);
+                            temp[i.0] = ((res[0] & 0xFF00) >> 8) as u8;
+                            temp[i.0 + 1] = (res[0] & 0xFF) as u8;
+                            break;
+                        } else {
+                            temp[i.0] = i.1.to_ascii_uppercase() as u8;
+                        }
+                    }
 
+                    if i.0 == 1 {
+                        break;
+                    }
+                }
+
+                if part.is_ascii() {
+                    let mut index = 0x08;
+                    for i in part.chars() {
+                        if index == 0x0B {
+                            break;
+                        }
+                        temp[index] = i.to_ascii_uppercase() as u8;
+                        index += 1;
+                    }
+                }
+
+                temp[0x02] = if fat & 0xFF000000 == 0 { 0x20 } else { (fat & 0xFF000000) as u8 };
+                temp[0x03] = if fat & 0x00FF0000 == 0 { 0x20 } else { (fat & 0x00FF0000) as u8 };
+                temp[0x04] = if fat & 0x0000FF00 == 0 { 0x20 } else { (fat & 0x0000FF00) as u8 };
+                temp[0x05] = if fat & 0x000000FF == 0 { 0x20 } else { (fat & 0x000000FF) as u8 };
+                temp[0x06] = '~' as u8;
+                temp[0x07] = '1' as u8;
             }
         }
 
@@ -260,7 +320,7 @@ impl<BASE> Dir<BASE>
         let part = match name.find('.') {
             Some(i) => {
                 (&name[0..i], &name[i + 1..])
-            },
+            }
             None => {
                 (&name[0..], "")
             }
@@ -291,23 +351,17 @@ impl<BASE> Dir<BASE>
         }
         index = 0;
 
-        for i in (0x01..0x0A).step_by(2) {
-            buf[offset + i] = temp[index];
-            buf[offset + i + 1] = temp[index + 1];
-            index += 2;
-        }
+        let mut op = |start: usize, end: usize| {
+            for i in (start..end).step_by(2) {
+                buf[offset + i] = temp[index];
+                buf[offset + i + 1] = temp[index + 1];
+                index += 2;
+            }
+        };
 
-        for i in (0x0E..0x19).step_by(2) {
-            buf[offset + i] = temp[index];
-            buf[offset + i + 1] = temp[index + 1];
-            index += 2;
-        }
-
-        for i in (0x1C..0x1F).step_by(2) {
-            buf[offset + i] = temp[index];
-            buf[offset + i + 1] = temp[index + 1];
-            index += 2;
-        }
+        op(0x01, 0x0A);
+        op(0x0E, 0x19);
+        op(0x1C, 0x1F);
     }
 
     fn get_slice_index(&self, name: &str, end: usize) -> usize {
@@ -321,58 +375,64 @@ impl<BASE> Dir<BASE>
     }
 
     fn edit_fat(&self, loc: u32, value: u32) {
+        let bps = self.bpb.byte_per_sector as u32;
+
         let fat_addr = self.bpb.fat1();
         let offset = loc * 4;
-        let offset_count = offset / 512;
-        let offset = (offset % 512) as usize;
+        let offset_count = offset / bps;
+        let offset = (offset % bps) as usize;
 
-        let mut buf = [0; 512];
-        self.base.read(&mut buf, fat_addr + offset_count * 512, 1).unwrap();
+        let mut buf = [0; BUFFER_SIZE];
+        self.base.read(&mut buf, fat_addr + offset_count * bps, 1).unwrap();
 
         buf[offset] = (value & 0xFF) as u8;
         buf[offset + 1] = ((value & 0xFF00) >> 8) as u8;
         buf[offset + 2] = ((value & 0xFF0000) >> 16) as u8;
         buf[offset + 3] = ((value & 0xFF00000) >> 24) as u8;
 
-        self.base.write(&buf, fat_addr + offset_count * 512, 1).unwrap();
+        self.base.write(&buf, fat_addr + offset_count * bps, 1).unwrap();
     }
 
     fn get_blank_place(&self) -> usize {
+        let bps = self.bpb.byte_per_sector as usize;
+
         let addr = self.bpb.offset(self.dir_cluster);
         let mut offset = 0;
-        let mut buf = [0; 512];
+        let mut buf = [0; BUFFER_SIZE];
 
         for _ in 0.. {
             let mut done = false;
             self.base.read(&mut buf, addr + offset as u32, 1).unwrap();
-            for i in (0..512).step_by(32) {
+            for i in (0..BUFFER_SIZE).step_by(32) {
                 if buf[i] == 0x00 {
                     offset += i;
                     done = true;
                     break;
                 }
             }
-            if done { break; } else { offset += 512; }
+            if done { break; } else { offset += bps; }
         }
         offset
     }
 
     fn get_blank_fat(&self) -> usize {
+        let bps = self.bpb.byte_per_sector as usize;
+
         let fat_addr = self.bpb.fat1();
         let mut offset = 0;
-        let mut buf = [0; 512];
+        let mut buf = [0; BUFFER_SIZE];
 
         for _ in 0.. {
             let mut done = false;
             self.base.read(&mut buf, fat_addr + offset as u32, 1).unwrap();
-            for i in (0..512).step_by(4) {
+            for i in (0..BUFFER_SIZE).step_by(4) {
                 if (buf[i] | buf[i + 1] | buf[i + 2] | buf[i + 3]) == 0 {
                     offset += i;
                     done = true;
                     break;
                 }
             }
-            if done { break; } else { offset += 512; }
+            if done { break; } else { offset += bps; }
         }
         offset
     }
@@ -411,6 +471,8 @@ impl<BASE> Dir<BASE>
     }
 
     fn get_file(&self, buf: &[u8], offset: u32) -> File<BASE> {
+        let bps = self.bpb.byte_per_sector as usize;
+
         let mut file_name = [0; 8];
         let mut extension_name = [0; 3];
         let create_time = [buf[0x0F], buf[0x0E]];
@@ -446,8 +508,9 @@ impl<BASE> Dir<BASE>
 
         if file_cluster == 0 {
             let fat_addr = self.get_blank_fat();
-            file_cluster = (fat_addr % 512 / 4) as u32;
+            file_cluster = (fat_addr % bps / 4) as u32;
             self.edit_fat(file_cluster, 0x0FFFFFFF);
+            self.set_cluster(file_cluster, offset);
         }
 
         File::<BASE> {
@@ -537,4 +600,24 @@ impl<BASE> Dir<BASE>
 
         return res;
     }
+
+    fn set_cluster(&self, cluster: u32, offset: u32) {
+        let bps = self.bpb.byte_per_sector as u32;
+
+        let offset_count = offset / bps;
+        let offset = (offset % bps) as usize;
+        let mut buf = [0; BUFFER_SIZE];
+
+        self.base.read(&mut buf, self.bpb.offset(self.dir_cluster) + offset_count * bps
+                       , 1).unwrap();
+
+        buf[offset + 0x1A] = (cluster & 0xFF) as u8;
+        buf[offset + 0x1B] = ((cluster & 0xFF00) >> 8) as u8;
+        buf[offset + 0x14] = ((cluster & 0xFF0000) >> 16) as u8;
+        buf[offset + 0x15] = ((cluster & 0xFF00000) >> 24) as u8;
+
+        self.base.write(&buf, self.bpb.offset(self.dir_cluster) + offset_count * bps
+                        , 1).unwrap();
+    }
 }
+
