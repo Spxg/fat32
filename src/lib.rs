@@ -62,7 +62,7 @@
 //! If your card block is other size, like 1024 Bytes
 //!
 //! ```
-//! fat32 = { version = "0.1", feature = ["1024"] }
+//! fat32 = { version = "0.1", features = ["1024"] }
 //! ```
 //!
 //! Then, you can do some tests
