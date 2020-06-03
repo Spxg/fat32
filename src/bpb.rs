@@ -13,6 +13,7 @@ pub struct BIOSParameterBlock {
 }
 
 impl BIOSParameterBlock {
+    /// use cluster to get offset
     pub(crate) fn offset(&self, cluster: u32) -> u32 {
         ((self.reserved_sector as u32)
             + (self.fat_count as u32) * self.sector_per_fat
@@ -20,6 +21,7 @@ impl BIOSParameterBlock {
             * (self.byte_per_sector as u32)
     }
 
+    /// get fat1 offset
     pub(crate) fn fat1(&self) -> u32 {
         (self.reserved_sector as u32) * (self.byte_per_sector as u32)
     }

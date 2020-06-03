@@ -2,6 +2,7 @@ use crate::bpb::BIOSParameterBlock;
 use crate::dir::Dir;
 use crate::BUFFER_SIZE;
 
+/// BasicOperation trait
 pub trait BasicOperation {
     type Error;
     fn read(&self, buf: &mut [u8], address: u32, number_of_blocks: u32) -> Result<(), Self::Error>;
@@ -20,6 +21,7 @@ pub struct Volume<BASE>
 impl<BASE> Volume<BASE>
     where BASE: BasicOperation + Clone + Copy,
           <BASE as BasicOperation>::Error: core::fmt::Debug {
+    /// get volume
     pub fn new(base: BASE) -> Volume<BASE> {
         let mut buf = [0; BUFFER_SIZE];
         base.read(&mut buf, 0, 1).unwrap();
@@ -34,10 +36,16 @@ impl<BASE> Volume<BASE>
             file_system[i - 0x52] = buf[i];
         }
 
+        let bps = ((buf[0x0C] as u16) << 8) | buf[0x0B] as u16;
+        if bps as usize != BUFFER_SIZE {
+            panic!("BUFFER_SIZE is {} Bytes, byte_per_sector is {} Bytes, no equal, \
+            please edit feature {}", BUFFER_SIZE, bps, bps);
+        }
+
         Volume::<BASE> {
             base,
             bpb: BIOSParameterBlock {
-                byte_per_sector: ((buf[0x0C] as u16) << 8) | buf[0x0B] as u16,
+                byte_per_sector: bps,
                 sector_per_cluster: buf[0x0D],
                 reserved_sector: ((buf[0x0F] as u16) << 8) | buf[0x0E] as u16,
                 fat_count: buf[0x10],
@@ -63,6 +71,7 @@ impl<BASE> Volume<BASE>
         }
     }
 
+    /// into root_dir
     pub fn root_dir(&self) -> Dir<BASE> {
         Dir::<BASE> {
             base: self.base,

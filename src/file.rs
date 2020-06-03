@@ -31,6 +31,7 @@ pub struct File<BASE>
 impl<BASE> File<BASE>
     where BASE: BasicOperation + Clone + Copy,
           <BASE as BasicOperation>::Error: core::fmt::Debug {
+    /// write buffer to card, buf length is multiple of BUFFER_SIZE
     pub fn write(&mut self, buf: &[u8]) -> Result<(), FileError> {
         let len = self.get_len(buf);
         let bps = self.bpb.byte_per_sector as u32;
@@ -66,6 +67,7 @@ impl<BASE> File<BASE>
         Ok(())
     }
 
+    /// read card blocks to buffer
     pub fn read(&self, buf: &mut [u8]) -> Result<usize, FileError> {
         if buf.len() < self.length as usize {
             return Err(FileError::BufTooSmall);
@@ -97,6 +99,7 @@ impl<BASE> File<BASE>
         return Ok(self.length as usize);
     }
 
+    /// clean fat
     fn clean_fat(&self) {
         let mut loc = self.file_cluster;
 
@@ -119,6 +122,7 @@ impl<BASE> File<BASE>
         self.edit_fat(self.file_cluster, 0x0FFFFFFF);
     }
 
+    /// get fat value
     fn get_fat_value(&self, loc: u32) -> u32 {
         let bps = self.bpb.byte_per_sector as u32;
 
@@ -134,6 +138,7 @@ impl<BASE> File<BASE>
             | ((buf[offset + 1] as u32) << 8) | (buf[offset] as u32)
     }
 
+    /// edit fat
     fn edit_fat(&self, loc: u32, value: u32) {
         let bps = self.bpb.byte_per_sector as u32;
 
@@ -153,6 +158,7 @@ impl<BASE> File<BASE>
         self.base.write(&buf, fat_addr + offset_count * bps, 1).unwrap();
     }
 
+    /// get blank fat offset
     fn get_blank_fat(&self) -> usize {
         let bps = self.bpb.byte_per_sector as u32;
 
@@ -174,6 +180,7 @@ impl<BASE> File<BASE>
         offset
     }
 
+    /// get file length
     fn get_len(&self, buf: &[u8]) -> u32 {
         let buf_len = buf.len();
         let mut len = 0;
@@ -187,6 +194,7 @@ impl<BASE> File<BASE>
         len as u32
     }
 
+    /// set file length
     fn set_len(&mut self, len: u32) {
         let bps = self.bpb.byte_per_sector as u32;
 
