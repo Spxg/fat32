@@ -47,7 +47,7 @@ impl<BASE> File<BASE>
 
         for i in 0..times {
             if i == times - 1 {
-                let blocks = (block % bpc) as usize;
+                let blocks = (block - i * bpc) as usize;
                 self.base.write(&buf[start_at..start_at + blocks * (bps as usize)],
                                 self.bpb.offset(loc), blocks as u32).unwrap();
                 break;
@@ -82,7 +82,7 @@ impl<BASE> File<BASE>
 
         for i in 0..times {
             if i == times - 1 {
-                let blocks = (block % bpc) as usize;
+                let blocks = (block - i * bpc) as usize;
                 self.base.read(&mut buf[start_at..start_at + blocks * (bps as usize)],
                                self.bpb.offset(loc), blocks as u32).unwrap();
                 break;
