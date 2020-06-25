@@ -1,3 +1,4 @@
+#![feature(in_band_lifetimes)]
 //! # fat32
 //! This is a simple fat32 filesystem library, which is `#![no_std]` and does not use `alloc`.
 //! This is a personal project, your issues may not be resolved in time

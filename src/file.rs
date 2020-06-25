@@ -2,6 +2,69 @@ use crate::base::BasicOperation;
 use crate::bpb::BIOSParameterBlock;
 use crate::BUFFER_SIZE;
 
+pub struct ReadIter<BASE>
+    where BASE: BasicOperation + Clone + Copy,
+          <BASE as BasicOperation>::Error: core::fmt::Debug {
+    base: BASE,
+    bpb: BIOSParameterBlock,
+    length: u32,
+    blocks: usize,
+    index: usize,
+    addr: u32,
+    loc: u32,
+}
+
+impl<BASE> Iterator for ReadIter<BASE>
+    where BASE: BasicOperation + Clone + Copy,
+          <BASE as BasicOperation>::Error: core::fmt::Debug {
+    type Item = ([u8; BUFFER_SIZE], usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut buf= [0; BUFFER_SIZE];
+
+        if self.index == self.blocks {
+            None
+        } else {
+            self.base.read(&mut buf, self.addr, 1).unwrap();
+            self.index += 1;
+
+            if self.index % (self.bpb.sector_per_cluster as usize) == 0 {
+                self.loc = self.get_fat_value(self.loc);
+                self.addr = self.bpb.offset(self.loc);
+            } else {
+                self.addr += self.bpb.byte_per_sector as u32;
+            }
+
+            let value = if self.index == self.blocks {
+                (self.length as usize) - (self.index - 1) * (self.bpb.byte_per_sector as usize)
+            } else {
+                self.bpb.byte_per_sector as usize
+            };
+
+            return Some((buf, value))
+        }
+    }
+}
+
+impl<BASE> ReadIter<BASE>
+    where BASE: BasicOperation + Clone + Copy,
+          <BASE as BasicOperation>::Error: core::fmt::Debug {
+    fn get_fat_value(&self, loc: u32) -> u32 {
+        let bps = self.bpb.byte_per_sector as u32;
+
+        let fat_addr = self.bpb.fat1();
+        let offset = loc * 4;
+        let offset_count = offset / bps;
+        let offset = (offset % bps) as usize;
+        let mut buf = [0; BUFFER_SIZE];
+
+        self.base.read(&mut buf, fat_addr + offset_count * bps, 1).unwrap();
+
+        ((buf[offset + 3] as u32) << 24) | ((buf[offset + 2] as u32) << 16)
+            | ((buf[offset + 1] as u32) << 8) | (buf[offset] as u32)
+    }
+}
+
 #[derive(Debug)]
 pub enum FileError {
     BufTooSmall,
@@ -97,6 +160,23 @@ impl<BASE> File<BASE>
         }
 
         return Ok(self.length as usize);
+    }
+
+    /// read card per block to buffer
+    pub fn read_per_block(&self) -> ReadIter<BASE> {
+        let bps = self.bpb.byte_per_sector as u32;
+        let block = if self.length % bps == 0 { self.length / bps } else { self.length / bps + 1 };
+        let addr = self.bpb.offset(self.file_cluster);
+
+        ReadIter::<BASE> {
+            base: self.base,
+            bpb: self.bpb,
+            length: self.length,
+            blocks: block as usize,
+            index: 0,
+            addr,
+            loc: self.file_cluster,
+        }
     }
 
     /// clean fat
