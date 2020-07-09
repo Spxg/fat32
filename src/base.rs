@@ -1,26 +1,20 @@
+use block_device::BlockDevice;
 use crate::bpb::BIOSParameterBlock;
 use crate::dir::Dir;
 use crate::BUFFER_SIZE;
 
-/// BasicOperation trait
-pub trait BasicOperation {
-    type Error;
-    fn read(&self, buf: &mut [u8], address: u32, number_of_blocks: u32) -> Result<(), Self::Error>;
-    fn write(&self, buf: &[u8], address: u32, number_of_blocks: u32) -> Result<(), Self::Error>;
-}
-
 #[derive(Debug, Copy, Clone)]
 pub struct Volume<BASE>
-    where BASE: BasicOperation + Clone + Copy,
-          <BASE as BasicOperation>::Error: core::fmt::Debug
+    where BASE: BlockDevice + Clone + Copy,
+          <BASE as BlockDevice>::Error: core::fmt::Debug
 {
     base: BASE,
     bpb: BIOSParameterBlock,
 }
 
 impl<BASE> Volume<BASE>
-    where BASE: BasicOperation + Clone + Copy,
-          <BASE as BasicOperation>::Error: core::fmt::Debug {
+    where BASE: BlockDevice + Clone + Copy,
+          <BASE as BlockDevice>::Error: core::fmt::Debug {
     /// get volume
     pub fn new(base: BASE) -> Volume<BASE> {
         let mut buf = [0; BUFFER_SIZE];

@@ -1,4 +1,4 @@
-use crate::base::BasicOperation;
+use block_device::BlockDevice;
 use crate::bpb::BIOSParameterBlock;
 use crate::file::File;
 use crate::BUFFER_SIZE;
@@ -28,8 +28,8 @@ enum NameType {
 
 #[derive(Debug, Copy, Clone)]
 pub struct Dir<BASE>
-    where BASE: BasicOperation + Clone + Copy,
-          <BASE as BasicOperation>::Error: core::fmt::Debug {
+    where BASE: BlockDevice + Clone + Copy,
+          <BASE as BlockDevice>::Error: core::fmt::Debug {
     pub(crate) base: BASE,
     pub(crate) bpb: BIOSParameterBlock,
     pub(crate) dir_name: [u8; 11],
@@ -44,8 +44,8 @@ pub struct Dir<BASE>
 }
 
 impl<BASE> Dir<BASE>
-    where BASE: BasicOperation + Clone + Copy,
-          <BASE as BasicOperation>::Error: core::fmt::Debug {
+    where BASE: BlockDevice + Clone + Copy,
+          <BASE as BlockDevice>::Error: core::fmt::Debug {
     /// into dir
     pub fn into_dir(&self, dir: &str) -> Result<Dir<BASE>, DirError> {
         match self.exist(dir) {

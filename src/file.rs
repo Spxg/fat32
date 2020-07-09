@@ -1,10 +1,10 @@
-use crate::base::BasicOperation;
+use block_device::BlockDevice;
 use crate::bpb::BIOSParameterBlock;
 use crate::BUFFER_SIZE;
 
 pub struct ReadIter<BASE>
-    where BASE: BasicOperation + Clone + Copy,
-          <BASE as BasicOperation>::Error: core::fmt::Debug {
+    where BASE: BlockDevice + Clone + Copy,
+          <BASE as BlockDevice>::Error: core::fmt::Debug {
     base: BASE,
     bpb: BIOSParameterBlock,
     length: u32,
@@ -15,8 +15,8 @@ pub struct ReadIter<BASE>
 }
 
 impl<BASE> Iterator for ReadIter<BASE>
-    where BASE: BasicOperation + Clone + Copy,
-          <BASE as BasicOperation>::Error: core::fmt::Debug {
+    where BASE: BlockDevice + Clone + Copy,
+          <BASE as BlockDevice>::Error: core::fmt::Debug {
     type Item = ([u8; BUFFER_SIZE], usize);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -47,8 +47,8 @@ impl<BASE> Iterator for ReadIter<BASE>
 }
 
 impl<BASE> ReadIter<BASE>
-    where BASE: BasicOperation + Clone + Copy,
-          <BASE as BasicOperation>::Error: core::fmt::Debug {
+    where BASE: BlockDevice + Clone + Copy,
+          <BASE as BlockDevice>::Error: core::fmt::Debug {
     fn get_fat_value(&self, loc: u32) -> u32 {
         let bps = self.bpb.byte_per_sector as u32;
 
@@ -73,8 +73,8 @@ pub enum FileError {
 
 #[derive(Debug, Copy, Clone)]
 pub struct File<BASE>
-    where BASE: BasicOperation + Clone + Copy,
-          <BASE as BasicOperation>::Error: core::fmt::Debug {
+    where BASE: BlockDevice + Clone + Copy,
+          <BASE as BlockDevice>::Error: core::fmt::Debug {
     pub(crate) base: BASE,
     pub(crate) bpb: BIOSParameterBlock,
     pub(crate) dir_cluster: u32,
@@ -92,8 +92,8 @@ pub struct File<BASE>
 }
 
 impl<BASE> File<BASE>
-    where BASE: BasicOperation + Clone + Copy,
-          <BASE as BasicOperation>::Error: core::fmt::Debug {
+    where BASE: BlockDevice + Clone + Copy,
+          <BASE as BlockDevice>::Error: core::fmt::Debug {
     /// write buffer to card, buf length is multiple of BUFFER_SIZE
     pub fn write(&mut self, buf: &[u8]) -> Result<(), FileError> {
         let len = self.get_len(buf);

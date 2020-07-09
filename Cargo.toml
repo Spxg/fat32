@@ -1,6 +1,6 @@
 [package]
 name = "fat32"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["spxg <itsme@spxg.me>"]
 edition = "2018"
 description = "A simple fat32 filesystem"
@@ -9,6 +9,9 @@ categories = ["embedded", "no-std"]
 repository = "https://github.com/play-stm32/fat32"
 readme = "README.md"
 license = "MIT"
+
+[dependencies]
+block_device = { git = "https://github.com/play-stm32/block_device.git", version = "0.1" }
 
 [features]
 default = ["512"]
