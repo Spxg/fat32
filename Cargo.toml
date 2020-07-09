@@ -10,9 +10,8 @@ repository = "https://github.com/play-stm32/fat32"
 readme = "README.md"
 license = "MIT"
 
-[dependencies.block_device]
-git = "https://github.com/play-stm32/block_device.git"
-version = "0.1"
+[dependencies]
+block_device = "0.1"
 
 [features]
 default = ["512"]
