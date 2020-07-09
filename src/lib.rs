@@ -13,20 +13,20 @@
 //!
 //! ## How to use
 //!
-//! You need make your library implement `BasicOperation` trait:
+//! You need make your library implement [`BlockDevice` trait](https://github.com/play-stm32/block_device):
 //!
 //! ```rust
-//! pub trait BasicOperation {
-//! type Error;
-//! fn read(&self, buf: &mut [u8], address: u32, number_of_blocks: u32) -> Result<(), Self::Error>;
-//! fn write(&self, buf: &[u8], address: u32, number_of_blocks: u32) -> Result<(), Self::Error>;
+//! pub trait BlockDevice {
+//!     type Error;
+//!     fn read(&self, buf: &mut [u8], address: u32, number_of_blocks: u32) -> Result<(), Self::Error>;
+//!     fn write(&self, buf: &[u8], address: u32, number_of_blocks: u32) -> Result<(), Self::Error>;
 //! }
 //! ```
 //!
 //! For example, I use my another library [sdio_sdhc](https://github.com/play-stm32/sdio_sdhc) to implement:
 //!
 //! ```rust
-//! impl BasicOperation for Card {
+//! impl BlockDevice for Card {
 //!    type Error = CmdError;
 //!
 //!    fn read(&self, buf: &mut [u8], address: u32, number_of_blocks: u32) -> Result<(), Self::Error> {
