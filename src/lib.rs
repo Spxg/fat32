@@ -3,12 +3,12 @@
 //! This is a personal project, your issues may not be resolved in time
 //!
 //! ## Support
-//! * create file and dir
+//! * create file or dir
 //! * read and write file
+//! * delete file or dir
 //!
 //! ## Will Support
 //! * append file
-//! * delete file and dir
 //! * format
 //!
 //! ## How to use

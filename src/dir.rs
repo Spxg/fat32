@@ -88,6 +88,40 @@ impl<BASE> Dir<BASE>
         Ok(())
     }
 
+    /// delete file or dir
+    pub fn delete(&self, file_or_dir: &str) -> Result<(), DirError> {
+        match self.exist(file_or_dir) {
+            Ok(info) => {
+                let mut info_offset = info.1;
+                let mut buf = [0; BUFFER_SIZE];
+                let bps = self.bpb.byte_per_sector as u32;
+
+                for up in 0.. {
+                    let offset_count = info_offset / bps;
+                    let offset = (info_offset % bps) as usize;
+
+                    self.base.read(&mut buf, self.bpb.offset(self.dir_cluster) + offset_count * bps
+                                   , 1).unwrap();
+
+                    if up != 0 && buf[offset + 0x0b] != 0x0F {
+                        break;
+                    } else {
+                        buf[offset] = 0xE5;
+                    }
+
+                    self.base.write(&buf, self.bpb.offset(self.dir_cluster) + offset_count * bps
+                                    , 1).unwrap();
+                    info_offset -= 32;
+                }
+            }
+            Err(_) => {
+                return Err(DirError::NoMatch);
+            }
+        }
+
+        Ok(())
+    }
+
     /// check file or dir exist
     pub fn exist(&self, name: &str) -> Result<([u8; 32], u32), DirError> {
         let illegal_char = "\\/:*?\"<>|";
@@ -642,4 +676,3 @@ impl<BASE> Dir<BASE>
                         , 1).unwrap();
     }
 }
-
