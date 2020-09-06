@@ -15,7 +15,7 @@ This is a personal project, your issues may not be resolved in time.
 
 ## How to use
 
-You need make your library implement [`BlockDevice` trait](https://github.com/play-stm32/block_device):
+You need make your library implement [`BlockDevice v0.1.0` trait](https://github.com/play-stm32/block_device):
 
 ```rust
 pub trait BlockDevice {
