@@ -9,9 +9,10 @@ This is a personal project, your issues may not be resolved in time.
 * read and write file
 * delete file or dir
 
-## Will Support 
+## TodoList 
 * append file
 * format
+* rewrite all codes
 
 ## How to use
 
