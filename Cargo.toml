@@ -1,6 +1,6 @@
 [package]
 name = "fat32"
-version = "0.1.5"
+version = "0.2.0"
 authors = ["spxg <itsme@spxg.me>"]
 edition = "2018"
 description = "A simple fat32 filesystem"
@@ -10,12 +10,5 @@ repository = "https://github.com/play-stm32/fat32"
 readme = "README.md"
 license = "MIT"
 
-[dependencies.block_device]
-version = "=0.1.0"
-
-[features]
-default = ["512"]
-512 = []
-1024 = []
-2048 = []
-4086 = []
+[dependencies]
+winapi = { version = "0.3", features = ["fileapi"] }
