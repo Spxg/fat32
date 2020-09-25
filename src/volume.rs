@@ -1,10 +1,12 @@
 use block_device::BlockDevice;
-use core::convert::TryInto;
-use core::str;
+use core::fmt::{Debug, Formatter, Result};
 use crate::bpb::BIOSParameterBlock;
 use crate::BUFFER_SIZE;
+use crate::tool::{is_fat32, read_le_u16, read_le_u32};
+use crate::dir::Dir;
+use core::str;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct Volume<T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug
@@ -51,19 +53,44 @@ impl<T> Volume<T>
             },
         }
     }
+
+    pub fn volume_label(&self) -> &str {
+        str::from_utf8(&self.bpb.volume_label).unwrap()
+    }
+
+    /// into root_dir
+    pub fn root_dir(&self) -> Dir<T> {
+        Dir::<T> {
+            device: self.device,
+            bpb: self.bpb,
+            dir_name: [0; 11],
+            create_ms: 0,
+            create_time: [0; 2],
+            create_date: [0; 2],
+            visit_date: [0; 2],
+            edit_time: [0; 2],
+            edit_date: [0; 2],
+            dir_cluster: self.bpb.root_cluster,
+            length: 0,
+        }
+    }
 }
 
-fn is_fat32(value: &[u8]) -> bool {
-    let file_system_str = str::from_utf8(&value[0..5]).unwrap();
-    file_system_str.eq("FAT32")
-}
-
-pub fn read_le_u16(input: &[u8]) -> u16 {
-    let (int_bytes, _) = input.split_at(core::mem::size_of::<u16>());
-    u16::from_le_bytes(int_bytes.try_into().unwrap())
-}
-
-pub fn read_le_u32(input: &[u8]) -> u32 {
-    let (int_bytes, _) = input.split_at(core::mem::size_of::<u32>());
-    u32::from_le_bytes(int_bytes.try_into().unwrap())
+impl<T> Debug for Volume<T>
+    where T: BlockDevice + Clone + Copy,
+          <T as BlockDevice>::Error: core::fmt::Debug {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.debug_struct("Volume")
+            .field("byte_per_sector", &self.bpb.byte_per_sector)
+            .field("sector_per_cluster", &self.bpb.sector_per_cluster)
+            .field("reserved_sector", &self.bpb.reserved_sector)
+            .field("num_fat", &self.bpb.num_fat)
+            .field("total_sector", &self.bpb.total_sector)
+            .field("sector_per_fat", &self.bpb.sector_per_fat)
+            .field("root_cluster", &self.bpb.root_cluster)
+            .field("id", &self.bpb.id)
+            .field("volume_label", &self.volume_label())
+            .field("file_system", &"FAT32")
+            .finish()
+    }
 }

@@ -1,8 +1,11 @@
 #![no_std]
-
 pub mod bpb;
 pub mod volume;
+pub mod tool;
+pub mod dir;
 
+#[macro_use]
+extern crate std;
 const BUFFER_SIZE: usize = 512;
 
 #[cfg(test)]
@@ -96,5 +99,6 @@ mod tests {
     fn test() {
         let device = Device::mount_read();
         let volume = Volume::new(device);
+        println!("{:#?}", volume);
     }
 }
