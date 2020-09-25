@@ -5,6 +5,7 @@ use crate::BUFFER_SIZE;
 use crate::tool::{is_fat32, read_le_u16, read_le_u32};
 use crate::dir::Dir;
 use core::str;
+use crate::detail::Detail;
 
 #[derive(Copy, Clone)]
 pub struct Volume<T>
@@ -33,7 +34,7 @@ impl<T> Volume<T>
 
         let bps = read_le_u16(&buf[0x0B..0x0D]);
         if bps as usize != BUFFER_SIZE {
-            panic!("BUFFER_SIZE is {} Bytes, byte_per_sector is {} Bytes, no equal, \
+            panic!("BUFFER_SIZE is {} Bytes, byte_per_sector is {} Bytes, \
             please edit feature {}", BUFFER_SIZE, bps, bps);
         }
 
@@ -63,15 +64,8 @@ impl<T> Volume<T>
         Dir::<T> {
             device: self.device,
             bpb: self.bpb,
-            dir_name: [0; 11],
-            create_ms: 0,
-            create_time: [0; 2],
-            create_date: [0; 2],
-            visit_date: [0; 2],
-            edit_time: [0; 2],
-            edit_date: [0; 2],
+            detail: Detail::default(),
             dir_cluster: self.bpb.root_cluster,
-            length: 0,
         }
     }
 }
