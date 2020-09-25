@@ -12,3 +12,6 @@ license = "MIT"
 
 [dependencies]
 winapi = { version = "0.3", features = ["fileapi"] }
+
+[dependencies.block_device]
+version = "0.1"
