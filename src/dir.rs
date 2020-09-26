@@ -20,8 +20,7 @@ impl<'a, T> Dir<'a, T>
         let offset = self.bpb.offset(self.detail.item.cluster());
         let bps = self.bpb.byte_per_sector_usize();
         let mut iter = DirIter::new(offset, bps, self.device);
-        let di = iter.find(|d| d.equal(value));
-        di
+        iter.find(|d| d.equal(value))
     }
 }
 
