@@ -1,11 +1,19 @@
+use core::str;
 use block_device::BlockDevice;
-use core::fmt::{Debug, Formatter, Result};
+use core::fmt::{
+    Debug,
+    Formatter,
+    Result
+};
+use crate::tool::{
+    is_fat32,
+    read_le_u16,
+    read_le_u32
+};
 use crate::bpb::BIOSParameterBlock;
 use crate::BUFFER_SIZE;
-use crate::tool::{is_fat32, read_le_u16, read_le_u32};
 use crate::dir::Dir;
-use core::str;
-use crate::detail::Detail;
+use crate::directory_item::DirectoryItem;
 
 #[derive(Copy, Clone)]
 pub struct Volume<T>
@@ -63,9 +71,8 @@ impl<T> Volume<T>
     pub fn root_dir(&self) -> Dir<T> {
         Dir::<T> {
             device: self.device,
-            bpb: self.bpb,
-            detail: Detail::default(),
-            dir_cluster: self.bpb.root_cluster,
+            bpb: &self.bpb,
+            detail: DirectoryItem::root_dir(self.bpb.root_cluster)
         }
     }
 }

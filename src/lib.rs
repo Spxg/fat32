@@ -3,7 +3,7 @@ pub mod bpb;
 pub mod volume;
 pub mod tool;
 pub mod dir;
-pub mod detail;
+pub mod directory_item;
 
 #[macro_use]
 extern crate std;
