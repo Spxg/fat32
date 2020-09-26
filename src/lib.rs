@@ -101,5 +101,9 @@ mod tests {
         let device = Device::mount_read();
         let volume = Volume::new(device);
         println!("{:#?}", volume);
+        let exist = volume.root_dir().exist("a.txt");
+        assert!(exist.is_some());
+        let exist = volume.root_dir().exist("abcde");
+        assert!(exist.is_some());
     }
 }

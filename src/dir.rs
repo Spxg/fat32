@@ -15,11 +15,14 @@ pub struct Dir<'a, T>
 impl<'a, T> Dir<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
-    // pub fn exist(&self, value: &str) -> Option<DirectoryItem> {
-    //     if is_illegal(value) { return None };
-    //
-    //     Some(DirectoryItem)
-    // }
+    pub fn exist(&self, value: &str) -> Option<DirectoryItem> {
+        if is_illegal(value) { return None };
+        let offset = self.bpb.offset(self.detail.item.cluster());
+        let bps = self.bpb.byte_per_sector_usize();
+        let mut iter = DirIter::new(offset, bps, self.device);
+        let di = iter.find(|d| d.equal(value));
+        di
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -31,7 +34,7 @@ pub struct DirIter<T>
     offset: usize,
     num_offset: usize,
     index: usize,
-    buffer: [u8; BUFFER_SIZE]
+    buffer: [u8; BUFFER_SIZE],
 }
 
 impl<T> DirIter<T>
@@ -52,13 +55,16 @@ impl<T> DirIter<T>
         self.offset + self.num_offset * self.bps
     }
 
-    fn offset_index(&mut self) -> usize {
+    fn offset_index(&mut self) {
         self.index += 32;
-        self.index
     }
 
     fn is_end(&self) -> bool {
         self.buffer[0] == 0x00
+    }
+
+    fn get_part_buf(&mut self) -> &[u8] {
+        &self.buffer[self.index..self.index + 32]
     }
 }
 
@@ -77,11 +83,12 @@ impl<T> Iterator for DirIter<T>
             self.num_offset += 1;
         }
 
-        if self.is_end() { return None };
+        if self.is_end() { return None; };
 
-        let index_offset = self.offset_index();
-        let buf = &self.buffer[self.index..index_offset];
+        let buf = self.get_part_buf();
         let di = DirectoryItem::from_buf(buf);
+        self.offset_index();
+
         Some(di)
     }
 }

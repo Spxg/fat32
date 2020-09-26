@@ -38,7 +38,7 @@ impl<T> Volume<T>
         let mut file_system = [0; 8];
         file_system.copy_from_slice(&buf[0x52..0x5A]);
 
-        if !is_fat32(&file_system) { panic!("not fat32 file_system"); }
+        if !is_fat32(&file_system) { panic!("not fat32 file system"); }
 
         let bps = read_le_u16(&buf[0x0B..0x0D]);
         if bps as usize != BUFFER_SIZE {
@@ -51,7 +51,7 @@ impl<T> Volume<T>
             bpb: BIOSParameterBlock {
                 byte_per_sector: bps,
                 sector_per_cluster: buf[0x0D],
-                reserved_sector: read_le_u16(&buf[0x0D..0x0F]),
+                reserved_sector: read_le_u16(&buf[0x0E..0x10]),
                 num_fat: buf[0x10],
                 total_sector: read_le_u32(&buf[0x20..0x24]),
                 sector_per_fat: read_le_u32(&buf[0x24..0x28]),
@@ -90,7 +90,7 @@ impl<T> Debug for Volume<T>
             .field("sector_per_fat", &self.bpb.sector_per_fat)
             .field("root_cluster", &self.bpb.root_cluster)
             .field("id", &self.bpb.id)
-            .field("volume_label", &self.volume_label())
+            .field("volume_label", &self.volume_label().trim())
             .field("file_system", &"FAT32")
             .finish()
     }
