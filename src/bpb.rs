@@ -25,4 +25,8 @@ impl BIOSParameterBlock {
     pub(crate) fn fat1(&self) -> usize {
         (self.reserved_sector as usize) * (self.byte_per_sector as usize)
     }
+
+    pub(crate) fn byte_per_sector_usize(&self) -> usize {
+        self.byte_per_sector as usize
+    }
 }
