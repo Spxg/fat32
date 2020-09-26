@@ -105,5 +105,7 @@ mod tests {
         assert!(exist.is_some());
         let exist = volume.root_dir().exist("abcde");
         assert!(exist.is_some());
+        let exist = volume.root_dir().exist("test1");
+        assert!(exist.is_some());
     }
 }

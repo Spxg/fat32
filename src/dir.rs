@@ -2,6 +2,7 @@ use block_device::BlockDevice;
 use crate::bpb::BIOSParameterBlock;
 use crate::directory_item::DirectoryItem;
 use crate::BUFFER_SIZE;
+use crate::tool::is_illegal;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Dir<'a, T>
@@ -59,7 +60,7 @@ impl<T> DirIter<T>
     }
 
     fn is_end(&self) -> bool {
-        self.buffer[0] == 0x00
+        self.buffer[self.index] == 0x00
     }
 
     fn get_part_buf(&mut self) -> &[u8] {
@@ -90,14 +91,4 @@ impl<T> Iterator for DirIter<T>
 
         Some(di)
     }
-}
-
-fn is_illegal(chs: &str) -> bool {
-    let illegal_char = "\\/:*?\"<>|";
-    for ch in illegal_char.chars() {
-        if chs.contains(ch) {
-            return true;
-        }
-    }
-    false
 }
