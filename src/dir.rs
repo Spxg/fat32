@@ -7,9 +7,10 @@ use crate::tool::{
     sfn_or_lfn,
     NameType,
     get_count_of_lfn,
-    get_left_of_lfn,
     get_lfn_index,
 };
+use crate::file::File;
+use crate::fat::FAT;
 
 #[derive(Debug, PartialOrd, PartialEq)]
 pub enum DirError {
@@ -32,6 +33,27 @@ pub struct Dir<'a, T>
 impl<'a, T> Dir<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
+    pub fn open_file(&self, file: &str) -> Result<File<'a, T>, DirError> {
+        if is_illegal(file) { return Err(DirError::IllegalChar); }
+        match self.exist(file) {
+            None => Err(DirError::NoMatchFile),
+            Some(di) => if di.is_file() {
+                let fat = FAT::new(di.cluster(),
+                                   self.device,
+                                   self.bpb.fat1());
+                Ok(File::<T> {
+                    device: self.device,
+                    bpb: self.bpb,
+                    dir_cluster: self.detail.cluster(),
+                    detail: di,
+                    fat,
+                })
+            } else {
+                Err(DirError::NoMatchFile)
+            }
+        }
+    }
+
     pub fn into_dir(&self, dir: &str) -> Result<Dir<'a, T>, DirError> {
         if is_illegal(dir) { return Err(DirError::IllegalChar); }
         match self.exist(dir) {

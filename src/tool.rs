@@ -51,10 +51,6 @@ pub(crate) fn get_count_of_lfn(value: usize) -> usize {
     if value % 13 == 0 { value / 13 } else { value / 13 + 1 }
 }
 
-pub(crate) fn get_left_of_lfn(value: usize) -> usize {
-    if value % 13 == 0 { 13 } else { value % 13 }
-}
-
 pub(crate) fn get_lfn_index(value_str: &str, count: usize) -> usize {
     let num = 13 * (count - 1);
     value_str.chars().enumerate().nth(num).unwrap().0

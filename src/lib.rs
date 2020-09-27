@@ -5,6 +5,8 @@ pub mod volume;
 pub mod tool;
 pub mod dir;
 pub mod directory_item;
+pub mod file;
+pub mod fat;
 
 #[macro_use]
 extern crate std;
@@ -18,15 +20,18 @@ mod fat32 {
     use winapi::um::fileapi;
     use block_device::BlockDevice;
     use core::ptr;
+    use core::str;
     use crate::volume::Volume;
     use self::winapi::ctypes::{c_void, c_ulong, c_long};
     use crate::dir::DirError;
+    use crate::BUFFER_SIZE;
 
     const GENERIC_READ: c_ulong = 1 << 31;
     const FILE_SHARE_READ: c_ulong = 0x00000001;
     const OPEN_EXISTING: c_ulong = 3;
     const INVALID_HANDLE_VALUE: *mut c_void = 0xffffffffffffffff as *mut c_void;
     const FILE_BEGIN: c_ulong = 0;
+    static mut HANDLE: *mut c_void = 0xffffffffffffffff as *mut c_void;
 
     #[derive(Debug)]
     enum DeviceError {
@@ -52,6 +57,10 @@ mod fat32 {
             };
 
             assert_ne!(handle, INVALID_HANDLE_VALUE);
+
+            unsafe {
+                HANDLE = handle;
+            }
 
             Self {
                 handle
@@ -94,25 +103,34 @@ mod fat32 {
             if res { Ok(()) } else { Err(DeviceError::ReadError) }
         }
 
-        fn write(&self, buf: &[u8], address: usize, number_of_blocks: usize) -> Result<(), Self::Error> {
+        fn write(&self, _buf: &[u8], _address: usize, _number_of_blocks: usize) -> Result<(), Self::Error> {
             unimplemented!()
         }
     }
 
     #[test]
-    fn get_directory_item() {
+    fn test_all() {
         let device = Device::mount_read();
         let volume = Volume::new(device);
         let root = volume.root_dir();
 
         let dir = root.into_dir("这是一个测试-Rust");
         assert!(dir.is_ok());
-
         let dir = dir.unwrap();
+
         let exist = dir.exist("Rust牛逼.txt");
         assert!(exist.is_some());
         let exist = dir.exist("cnb.txt");
         assert!(exist.is_some());
+
+        let cnb = dir.open_file("cnb.txt");
+        assert!(cnb.is_ok());
+        let cnb = cnb.unwrap();
+        let mut buf = [0; BUFFER_SIZE];
+        let read = cnb.read(&mut buf);
+        assert!(read.is_ok());
+        let length = read.unwrap();
+        assert_eq!("c牛逼", str::from_utf8(&buf[0..length]).unwrap());
 
         let not_exist = root.into_dir("not_exist_dir");
         assert_eq!(DirError::NoMatchDir, not_exist.err().unwrap());

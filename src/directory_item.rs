@@ -241,6 +241,14 @@ impl _DirectoryItem {
             None
         }
     }
+
+    pub(crate) fn length(&self) -> Option<usize> {
+        if self.short.is_some() {
+            Some(self.short.unwrap().length as usize)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Default, Copy, Clone, Debug)]
