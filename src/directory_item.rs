@@ -2,11 +2,12 @@ use core::str;
 use core::ops::Deref;
 use crate::tool::read_le_u32;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 pub enum ItemType {
     Dir,
     File,
     LFN,
+    Deleted,
 }
 
 impl ItemType {
@@ -257,7 +258,11 @@ impl DirectoryItem {
     }
 
     pub(crate) fn from_buf(buf: &[u8]) -> Self {
-        let item_type = ItemType::from_value(buf[0x0B]);
+        let item_type = if buf[0x00] == 0xE5 {
+            ItemType::Deleted
+        } else {
+            ItemType::from_value(buf[0x0B])
+        };
 
         let item = match item_type {
             ItemType::LFN => LongDirectoryItem::from_buf(buf),
@@ -271,6 +276,7 @@ impl DirectoryItem {
     }
 
     pub(crate) fn sfn_equal(&self, value: &str) -> bool {
+        if self.is_deleted() { return false; }
         let option = self.item.get_sfn();
         if option.is_none() { return false; }
         let (bytes, len) = option.unwrap();
@@ -282,6 +288,7 @@ impl DirectoryItem {
     }
 
     pub(crate) fn lfn_equal(&self, value: &str) -> bool {
+        if self.is_deleted() { return false; }
         let option = self.item.get_lfn();
         if option.is_none() { return false; }
         let (bytes, len) = option.unwrap();
@@ -293,7 +300,19 @@ impl DirectoryItem {
     }
 
     pub(crate) fn is_lfn(&self) -> bool {
-        if let ItemType::LFN = self.item_type { true } else { false }
+        ItemType::LFN == self.item_type
+    }
+
+    pub(crate) fn is_deleted(&self) -> bool {
+        ItemType::Deleted == self.item_type
+    }
+
+    pub(crate) fn is_dir(&self) -> bool {
+        ItemType::Dir == self.item_type
+    }
+
+    pub(crate) fn is_file(&self) -> bool {
+        ItemType::File == self.item_type
     }
 }
 

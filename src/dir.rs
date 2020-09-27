@@ -11,6 +11,15 @@ use crate::tool::{
     get_lfn_index,
 };
 
+#[derive(Debug, PartialOrd, PartialEq)]
+pub enum DirError {
+    NoMatchDir,
+    NoMatchFile,
+    IllegalName,
+    DirHasExist,
+    FileHasExist,
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct Dir<'a, T>
     where T: BlockDevice + Clone + Copy,
@@ -23,6 +32,21 @@ pub struct Dir<'a, T>
 impl<'a, T> Dir<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
+    pub fn into_dir(&self, dir: &str) -> Result<Dir<'a, T>, DirError> {
+        match self.exist(dir) {
+            None => Err(DirError::NoMatchDir),
+            Some(di) => if di.is_dir() {
+                Ok(Self {
+                    device: self.device,
+                    bpb: self.bpb,
+                    detail: di,
+                })
+            } else {
+                Err(DirError::NoMatchDir)
+            }
+        }
+    }
+
     pub fn exist(&self, value: &str) -> Option<DirectoryItem> {
         if is_illegal(value) { return None; };
         let offset = self.bpb.offset(self.detail.item.cluster());
@@ -57,6 +81,7 @@ impl<'a, T> Dir<'a, T>
             for _ in 0..loop_count {
                 let value = &value[0..index];
                 index = get_lfn_index(value, count);
+
                 let next = iter.next().unwrap();
                 if next.lfn_equal(&value[index..]) {
                     continue;

@@ -12,7 +12,7 @@ extern crate std;
 const BUFFER_SIZE: usize = 512;
 
 #[cfg(test)]
-mod tests {
+mod fat32 {
     extern crate winapi;
 
     use winapi::um::fileapi;
@@ -20,6 +20,7 @@ mod tests {
     use core::ptr;
     use crate::volume::Volume;
     use self::winapi::ctypes::{c_void, c_ulong, c_long};
+    use crate::dir::DirError;
 
     const GENERIC_READ: c_ulong = 1 << 31;
     const FILE_SHARE_READ: c_ulong = 0x00000001;
@@ -99,19 +100,21 @@ mod tests {
     }
 
     #[test]
-    fn test() {
+    fn get_directory_item() {
         let device = Device::mount_read();
         let volume = Volume::new(device);
-        println!("{:#?}", volume);
-        let exist = volume.root_dir().exist("a.txt");
+        let root = volume.root_dir();
+
+        let dir = root.into_dir("这是一个测试-Rust");
+        assert!(dir.is_ok());
+
+        let dir = dir.unwrap();
+        let exist = dir.exist("Rust牛逼.txt");
         assert!(exist.is_some());
-        let exist = volume.root_dir().exist("abcde");
+        let exist = dir.exist("cnb.txt");
         assert!(exist.is_some());
-        let exist = volume.root_dir().exist("test1");
-        assert!(exist.is_some());
-        let exist = volume.root_dir().exist("abcdefghijk.txt");
-        assert!(exist.is_some());
-        let exist = volume.root_dir().exist("Rust牛逼.txt");
-        assert!(exist.is_some());
+
+        let not_exist = root.into_dir("not_exist_dir");
+        assert_eq!(DirError::NoMatchDir, not_exist.err().unwrap());
     }
 }
