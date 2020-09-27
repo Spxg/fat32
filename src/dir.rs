@@ -10,7 +10,6 @@ use crate::tool::{
     get_left_of_lfn,
     get_lfn_index,
 };
-use crate::dir::DirError::IllegalName;
 
 #[derive(Debug, PartialOrd, PartialEq)]
 pub enum DirError {
