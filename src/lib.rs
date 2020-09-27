@@ -1,4 +1,5 @@
 #![no_std]
+
 pub mod bpb;
 pub mod volume;
 pub mod tool;
@@ -7,6 +8,7 @@ pub mod directory_item;
 
 #[macro_use]
 extern crate std;
+
 const BUFFER_SIZE: usize = 512;
 
 #[cfg(test)]
@@ -106,6 +108,10 @@ mod tests {
         let exist = volume.root_dir().exist("abcde");
         assert!(exist.is_some());
         let exist = volume.root_dir().exist("test1");
+        assert!(exist.is_some());
+        let exist = volume.root_dir().exist("abcdefghijk.txt");
+        assert!(exist.is_some());
+        let exist = volume.root_dir().exist("Rust牛逼.txt");
         assert!(exist.is_some());
     }
 }

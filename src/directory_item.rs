@@ -1,5 +1,6 @@
-use crate::tool::read_le_u32;
 use core::str;
+use core::ops::Deref;
+use crate::tool::read_le_u32;
 
 #[derive(Copy, Clone, Debug)]
 pub enum ItemType {
@@ -49,7 +50,7 @@ impl ShortDirectoryItem {
         _DirectoryItem::from_short(s)
     }
 
-    pub fn from_buf(buf: &[u8]) -> _DirectoryItem {
+    fn from_buf(buf: &[u8]) -> _DirectoryItem {
         let mut name = [0; 8];
         let mut extension = [0; 3];
         let create_time = [buf[0x0F], buf[0x0E]];
@@ -135,6 +136,52 @@ impl LongDirectoryItem {
 
         _DirectoryItem::from_long(l)
     }
+
+    fn to_utf8(&self) -> ([u8; 13 * 3], usize) {
+        let (mut utf8, mut len) = ([0; 13 * 3], 0);
+
+        let mut op = |part: &[u8]| {
+            for i in (0..part.len()).step_by(2) {
+                if (part[i] == 0x00 && part[i + 1] == 0x00) || part[i] == 0xFF { break; }
+                let unicode = ((part[i + 1] as u16) << 8) | part[i] as u16;
+
+                if unicode <= 0x007F {
+                    utf8[len] = unicode as u8;
+                    len += 1;
+                } else if unicode >= 0x0080 && unicode <= 0x07FF {
+                    let part1 = (0b11000000 | (0b00011111 & (unicode >> 6))) as u8;
+                    let part2 = (0b10000000 | (0b00111111) & unicode) as u8;
+
+                    utf8[len] = part1;
+                    utf8[len + 1] = part2;
+                    len += 2;
+                } else if unicode >= 0x0800 {
+                    let part1 = (0b11100000 | (0b00011111 & (unicode >> 12))) as u8;
+                    let part2 = (0b10000000 | (0b00111111) & (unicode >> 6)) as u8;
+                    let part3 = (0b10000000 | (0b00111111) & unicode) as u8;
+
+                    utf8[len] = part1;
+                    utf8[len + 1] = part2;
+                    utf8[len + 2] = part3;
+                    len += 3;
+                }
+            }
+        };
+
+        op(&self.unicode_part1);
+        op(&self.unicode_part2);
+        op(&self.unicode_part3);
+
+        (utf8, len)
+    }
+
+    fn count_of_name(&self) -> usize {
+        self.attribute as usize & 0x1F
+    }
+
+    fn is_name_end(&self) -> bool {
+        (self.attribute & 0x40) == 0x40
+    }
 }
 
 #[derive(Default, Copy, Clone, Debug)]
@@ -144,7 +191,7 @@ pub struct _DirectoryItem {
 }
 
 impl _DirectoryItem {
-    pub fn cluster(&self) -> u32 {
+    pub(crate) fn cluster(&self) -> u32 {
         self.short.unwrap().cluster
     }
 
@@ -162,11 +209,35 @@ impl _DirectoryItem {
         }
     }
 
-    fn get_full_name_bytes(&self) -> ([u8; 12], usize) {
+    fn get_sfn(&self) -> Option<([u8; 12], usize)> {
         if self.short.is_some() {
-            self.short.unwrap().get_full_name_bytes()
+            Some(self.short.unwrap().get_full_name_bytes())
         } else {
-            ([0; 12], 0)
+            None
+        }
+    }
+
+    fn get_lfn(&self) -> Option<([u8; 13 * 3], usize)> {
+        if self.long.is_some() {
+            Some(self.long.unwrap().to_utf8())
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn count_of_name(&self) -> Option<usize> {
+        if self.long.is_some() {
+            Some(self.long.unwrap().count_of_name())
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn is_name_end(&self) -> Option<bool> {
+        if self.long.is_some() {
+            Some(self.long.unwrap().is_name_end())
+        } else {
+            None
         }
     }
 }
@@ -178,14 +249,14 @@ pub struct DirectoryItem {
 }
 
 impl DirectoryItem {
-    pub fn root_dir(cluster: u32) -> Self {
+    pub(crate) fn root_dir(cluster: u32) -> Self {
         Self {
             item: ShortDirectoryItem::root_dir(cluster),
             ..Self::default()
         }
     }
 
-    pub fn from_buf(buf: &[u8]) -> Self {
+    pub(crate) fn from_buf(buf: &[u8]) -> Self {
         let item_type = ItemType::from_value(buf[0x0B]);
 
         let item = match item_type {
@@ -199,12 +270,37 @@ impl DirectoryItem {
         }
     }
 
-    pub fn equal(&self, value: &str) -> bool {
-        let (bytes, len) = self.item.get_full_name_bytes();
+    pub(crate) fn sfn_equal(&self, value: &str) -> bool {
+        let option = self.item.get_sfn();
+        if option.is_none() { return false; }
+        let (bytes, len) = option.unwrap();
         if let Ok(res) = str::from_utf8(&bytes[0..len]) {
             value.eq_ignore_ascii_case(res)
         } else {
             false
         }
+    }
+
+    pub(crate) fn lfn_equal(&self, value: &str) -> bool {
+        let option = self.item.get_lfn();
+        if option.is_none() { return false; }
+        let (bytes, len) = option.unwrap();
+        if let Ok(res) = str::from_utf8(&bytes[0..len]) {
+            value.eq_ignore_ascii_case(res)
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn is_lfn(&self) -> bool {
+        if let ItemType::LFN = self.item_type { true } else { false }
+    }
+}
+
+impl Deref for DirectoryItem {
+    type Target = _DirectoryItem;
+
+    fn deref(&self) -> &Self::Target {
+        &self.item
     }
 }

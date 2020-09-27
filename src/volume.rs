@@ -3,12 +3,12 @@ use block_device::BlockDevice;
 use core::fmt::{
     Debug,
     Formatter,
-    Result
+    Result,
 };
 use crate::tool::{
     is_fat32,
     read_le_u16,
-    read_le_u32
+    read_le_u32,
 };
 use crate::bpb::BIOSParameterBlock;
 use crate::BUFFER_SIZE;
@@ -72,7 +72,7 @@ impl<T> Volume<T>
         Dir::<T> {
             device: self.device,
             bpb: &self.bpb,
-            detail: DirectoryItem::root_dir(self.bpb.root_cluster)
+            detail: DirectoryItem::root_dir(self.bpb.root_cluster),
         }
     }
 }
