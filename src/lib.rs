@@ -109,15 +109,18 @@ mod fat32 {
         let volume = Volume::new(device);
         let root = volume.root_dir();
 
+        // directory item test
         let dir = root.into_dir("这是一个测试-Rust");
         assert!(dir.is_ok());
         let dir = dir.unwrap();
-
         let exist = dir.exist("Rust牛逼.txt");
         assert!(exist.is_some());
         let exist = dir.exist("cnb.txt");
         assert!(exist.is_some());
+        let not_exist = root.into_dir("not_exist_dir");
+        assert_eq!(DirError::NoMatchDir, not_exist.err().unwrap());
 
+        // read file test
         let cnb = dir.open_file("cnb.txt");
         assert!(cnb.is_ok());
         let cnb = cnb.unwrap();
@@ -126,8 +129,5 @@ mod fat32 {
         assert!(read.is_ok());
         let length = read.unwrap();
         assert_eq!("c牛逼", str::from_utf8(&buf[0..length]).unwrap());
-
-        let not_exist = root.into_dir("not_exist_dir");
-        assert_eq!(DirError::NoMatchDir, not_exist.err().unwrap());
     }
 }
