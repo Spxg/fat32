@@ -10,12 +10,13 @@ use crate::tool::{
     get_left_of_lfn,
     get_lfn_index,
 };
+use crate::dir::DirError::IllegalName;
 
 #[derive(Debug, PartialOrd, PartialEq)]
 pub enum DirError {
     NoMatchDir,
     NoMatchFile,
-    IllegalName,
+    IllegalChar,
     DirHasExist,
     FileHasExist,
 }
@@ -33,6 +34,7 @@ impl<'a, T> Dir<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
     pub fn into_dir(&self, dir: &str) -> Result<Dir<'a, T>, DirError> {
+        if is_illegal(dir) { return Err(DirError::IllegalChar); }
         match self.exist(dir) {
             None => Err(DirError::NoMatchDir),
             Some(di) => if di.is_dir() {
@@ -48,7 +50,6 @@ impl<'a, T> Dir<'a, T>
     }
 
     pub fn exist(&self, value: &str) -> Option<DirectoryItem> {
-        if is_illegal(value) { return None; };
         let offset = self.bpb.offset(self.detail.item.cluster());
         let bps = self.bpb.byte_per_sector_usize();
         let mut iter = DirIter::new(offset, bps, self.device);
