@@ -2,7 +2,14 @@ use block_device::BlockDevice;
 use crate::bpb::BIOSParameterBlock;
 use crate::directory_item::DirectoryItem;
 use crate::BUFFER_SIZE;
-use crate::tool::{is_illegal, sfn_or_lfn, NameType, get_count_of_lfn, get_left_of_lfn, get_lfn_index};
+use crate::tool::{
+    is_illegal,
+    sfn_or_lfn,
+    NameType,
+    get_count_of_lfn,
+    get_left_of_lfn,
+    get_lfn_index,
+};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Dir<'a, T>
