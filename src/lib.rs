@@ -31,7 +31,6 @@ mod fat32 {
     const OPEN_EXISTING: c_ulong = 3;
     const INVALID_HANDLE_VALUE: *mut c_void = 0xffffffffffffffff as *mut c_void;
     const FILE_BEGIN: c_ulong = 0;
-    static mut HANDLE: *mut c_void = 0xffffffffffffffff as *mut c_void;
 
     #[derive(Debug)]
     enum DeviceError {
@@ -57,10 +56,6 @@ mod fat32 {
             };
 
             assert_ne!(handle, INVALID_HANDLE_VALUE);
-
-            unsafe {
-                HANDLE = handle;
-            }
 
             Self {
                 handle
