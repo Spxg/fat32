@@ -91,14 +91,14 @@ mod fat32 {
     impl BlockDevice for Device {
         type Error = DeviceError;
 
-        fn read(&self, buf: &mut [u8], address: usize, number_of_blocks: usize) -> Result<(), Self::Error> {
+        fn read(&self, buf: &mut [u8], address: usize) -> Result<(), Self::Error> {
             let mut len = 0;
             self.set_file_pointer(address as i32);
-            let res = self.read(buf, number_of_blocks as c_ulong, &mut len);
+            let res = self.read(buf, 1, &mut len);
             if res { Ok(()) } else { Err(DeviceError::ReadError) }
         }
 
-        fn write(&self, _buf: &[u8], _address: usize, _number_of_blocks: usize) -> Result<(), Self::Error> {
+        fn write(&self, _buf: &[u8], _address: usize) -> Result<(), Self::Error> {
             unimplemented!()
         }
     }

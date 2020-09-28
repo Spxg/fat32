@@ -170,8 +170,7 @@ impl<T> Iterator for DirIter<T>
         if self.index % BUFFER_SIZE == 0 {
             let offset = self.offset_value();
             self.device.read(&mut self.buffer,
-                             offset,
-                             1).unwrap();
+                             offset).unwrap();
             self.index = 0;
             self.num_offset += 1;
         }

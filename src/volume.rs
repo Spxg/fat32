@@ -30,7 +30,7 @@ impl<T> Volume<T>
     /// get volume
     pub fn new(device: T) -> Volume<T> {
         let mut buf = [0; BUFFER_SIZE];
-        device.read(&mut buf, 0, 1).unwrap();
+        device.read(&mut buf, 0).unwrap();
 
         let mut volume_label = [0; 11];
         volume_label.copy_from_slice(&buf[0x47..0x52]);

@@ -55,8 +55,7 @@ impl<T> Iterator for FAT<T>
         let offset_left = offset % BUFFER_SIZE;
 
         self.device.read(&mut buf,
-                         self.fat_offset + block_offset,
-                         1).unwrap();
+                         self.fat_offset + block_offset).unwrap();
 
         let next_cluster = read_le_u32(&buf[offset_left..offset_left + 4]);
         let next_cluster = if next_cluster == 0x0FFFFFFF {

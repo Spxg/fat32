@@ -31,8 +31,7 @@ impl<'a, T> File<'a, T>
         self.fat.map(|f| {
             let offset = self.bpb.offset(f.current_cluster);
             self.device.read(&mut buf[index..index + BUFFER_SIZE],
-                             offset,
-                             1).unwrap();
+                             offset).unwrap();
             index += BUFFER_SIZE;
         }).last();
 
