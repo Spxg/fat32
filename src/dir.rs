@@ -3,9 +3,9 @@ use crate::bpb::BIOSParameterBlock;
 use crate::directory_item::DirectoryItem;
 use crate::BUFFER_SIZE;
 use crate::tool::{
+    NameType,
     is_illegal,
     sfn_or_lfn,
-    NameType,
     get_count_of_lfn,
     get_lfn_index,
 };
@@ -21,6 +21,11 @@ pub enum DirError {
     FileHasExist,
 }
 
+enum CreateType {
+    Dir,
+    File,
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct Dir<'a, T>
     where T: BlockDevice + Clone + Copy,
@@ -33,6 +38,14 @@ pub struct Dir<'a, T>
 impl<'a, T> Dir<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
+    pub fn create_dir(&self, dir: &str) -> Result<(), DirError> {
+        self.create(dir, CreateType::Dir)
+    }
+
+    pub fn create_file(&self, file: &str) -> Result<(), DirError> {
+        self.create(file, CreateType::File)
+    }
+
     pub fn open_file(&self, file: &str) -> Result<File<'a, T>, DirError> {
         if is_illegal(file) { return Err(DirError::IllegalChar); }
         match self.exist(file) {
@@ -115,6 +128,23 @@ impl<'a, T> Dir<'a, T>
         }
 
         if has_match { iter.next() } else { None }
+    }
+
+    fn create(&self, value: &str, create_type: CreateType) -> Result<(), DirError> {
+        if is_illegal(value) { return Err(DirError::IllegalChar); }
+        if let Some(_) = self.exist(value) {
+            return match create_type {
+                CreateType::Dir => Err(DirError::DirHasExist),
+                CreateType::File => Err(DirError::FileHasExist)
+            }
+        }
+
+        match sfn_or_lfn(value) {
+            NameType::SFN => {}
+            NameType::LFN => {}
+        }
+
+        Ok(())
     }
 }
 

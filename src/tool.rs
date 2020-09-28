@@ -39,6 +39,8 @@ pub(crate) fn sfn_or_lfn(value: &str) -> NameType {
 
     if value.is_ascii()
         && !value.contains(' ')
+        && !part.0.contains('.')
+        && !part.1.contains('.')
         && part.0.len() <= 8
         && part.1.len() <= 3 {
         NameType::SFN

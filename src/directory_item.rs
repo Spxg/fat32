@@ -258,6 +258,7 @@ pub struct DirectoryItem {
 }
 
 impl DirectoryItem {
+    // pub(crate) fn new_sfn(cluster: u32, name: &str, ex)
     pub(crate) fn root_dir(cluster: u32) -> Self {
         Self {
             item: ShortDirectoryItem::root_dir(cluster),

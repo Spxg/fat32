@@ -113,6 +113,8 @@ mod fat32 {
         let dir = root.cd("这是一个测试-Rust");
         assert!(dir.is_ok());
         let dir = dir.unwrap();
+        let dot_dir = dir.cd("1.1.1.1");
+        assert!(dot_dir.is_ok());
         let exist = dir.exist("Rust牛逼.txt");
         assert!(exist.is_some());
         let exist = dir.exist("cnb.txt");
