@@ -54,7 +54,7 @@ impl<'a, T> Dir<'a, T>
         }
     }
 
-    pub fn into_dir(&self, dir: &str) -> Result<Dir<'a, T>, DirError> {
+    pub fn cd(&self, dir: &str) -> Result<Dir<'a, T>, DirError> {
         if is_illegal(dir) { return Err(DirError::IllegalChar); }
         match self.exist(dir) {
             None => Err(DirError::NoMatchDir),

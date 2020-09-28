@@ -110,14 +110,14 @@ mod fat32 {
         let root = volume.root_dir();
 
         // directory item test
-        let dir = root.into_dir("这是一个测试-Rust");
+        let dir = root.cd("这是一个测试-Rust");
         assert!(dir.is_ok());
         let dir = dir.unwrap();
         let exist = dir.exist("Rust牛逼.txt");
         assert!(exist.is_some());
         let exist = dir.exist("cnb.txt");
         assert!(exist.is_some());
-        let not_exist = root.into_dir("not_exist_dir");
+        let not_exist = root.cd("not_exist_dir");
         assert_eq!(DirError::NoMatchDir, not_exist.err().unwrap());
 
         // read file test
