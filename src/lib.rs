@@ -18,6 +18,8 @@ mod fat32 {
     extern crate winapi;
 
     use winapi::um::fileapi;
+    use winapi::um::winioctl;
+    use winapi::um::ioapiset;
     use block_device::BlockDevice;
     use core::ptr;
     use core::str;
@@ -27,14 +29,17 @@ mod fat32 {
     use crate::BUFFER_SIZE;
 
     const GENERIC_READ: c_ulong = 1 << 31;
+    const GENERIC_WRITE: c_ulong = 1 << 30;
     const FILE_SHARE_READ: c_ulong = 0x00000001;
+    const FILE_SHARE_WRITE: c_ulong = 0x00000002;
     const OPEN_EXISTING: c_ulong = 3;
     const INVALID_HANDLE_VALUE: *mut c_void = 0xffffffffffffffff as *mut c_void;
     const FILE_BEGIN: c_ulong = 0;
 
     #[derive(Debug)]
     enum DeviceError {
-        ReadError
+        ReadError,
+        WriteError,
     }
 
     #[derive(Debug, Copy, Clone)]
@@ -43,12 +48,12 @@ mod fat32 {
     }
 
     impl Device {
-        fn mount_read() -> Self {
+        fn mount() -> Self {
             let disk = "\\\\.\\F:";
             let handle = unsafe {
                 fileapi::CreateFileA(disk.as_ptr() as *const i8,
-                                     GENERIC_READ,
-                                     FILE_SHARE_READ,
+                                     GENERIC_READ | GENERIC_WRITE,
+                                     FILE_SHARE_READ | FILE_SHARE_WRITE,
                                      ptr::null_mut(),
                                      OPEN_EXISTING,
                                      0,
@@ -56,6 +61,20 @@ mod fat32 {
             };
 
             assert_ne!(handle, INVALID_HANDLE_VALUE);
+
+            let _lp = 0;
+            let code = unsafe {
+                ioapiset::DeviceIoControl(handle,
+                                          winioctl::FSCTL_DISMOUNT_VOLUME,
+                                          ptr::null_mut(),
+                                          0,
+                                          ptr::null_mut(),
+                                          0,
+                                          _lp as *mut c_ulong,
+                                          ptr::null_mut())
+            };
+
+            assert_eq!(code, 1);
 
             Self {
                 handle
@@ -71,17 +90,31 @@ mod fat32 {
             }
         }
 
-        fn read(&self,
-                buf: &mut [u8],
-                number_of_blocks: c_ulong,
-                number_of_bytes_read: &mut c_ulong,
+        fn _read(&self,
+                 buf: &mut [u8],
+                 number_of_bytes_read: &mut c_ulong,
         ) -> bool {
             let bool_int = unsafe {
                 fileapi::ReadFile(self.handle,
                                   buf.as_ptr() as *mut c_void,
-                                  number_of_blocks * 512,
+                                  BUFFER_SIZE as c_ulong,
                                   number_of_bytes_read as *mut c_ulong,
                                   ptr::null_mut())
+            };
+
+            bool_int != 0
+        }
+
+        fn _write(&self,
+                  buf: &[u8],
+                  number_of_bytes_write: &mut c_ulong,
+        ) -> bool {
+            let bool_int = unsafe {
+                fileapi::WriteFile(self.handle,
+                                   buf.as_ptr() as *const c_void,
+                                   BUFFER_SIZE as c_ulong,
+                                   number_of_bytes_write as *mut c_ulong,
+                                   ptr::null_mut())
             };
 
             bool_int != 0
@@ -94,25 +127,28 @@ mod fat32 {
         fn read(&self, buf: &mut [u8], address: usize) -> Result<(), Self::Error> {
             let mut len = 0;
             self.set_file_pointer(address as i32);
-            let res = self.read(buf, 1, &mut len);
+            let res = self._read(buf, &mut len);
             if res { Ok(()) } else { Err(DeviceError::ReadError) }
         }
 
-        fn write(&self, _buf: &[u8], _address: usize) -> Result<(), Self::Error> {
-            unimplemented!()
+        fn write(&self, buf: &[u8], address: usize) -> Result<(), Self::Error> {
+            let mut len = 0;
+            self.set_file_pointer(address as i32);
+            let res = self._write(buf, &mut len);
+            if res { Ok(()) } else { Err(DeviceError::WriteError) }
         }
     }
 
     #[test]
     fn test_all() {
-        let device = Device::mount_read();
+        let device = Device::mount();
         let volume = Volume::new(device);
         let root = volume.root_dir();
 
         // directory item test
         let dir = root.cd("这是一个测试-Rust");
         assert!(dir.is_ok());
-        let dir = dir.unwrap();
+        let mut dir = dir.unwrap();
         let dot_dir = dir.cd("1.1.1.1");
         assert!(dot_dir.is_ok());
         let exist = dir.exist("Rust牛逼.txt");
@@ -131,5 +167,9 @@ mod fat32 {
         assert!(read.is_ok());
         let length = read.unwrap();
         assert_eq!("c牛逼", str::from_utf8(&buf[0..length]).unwrap());
+
+        // create test
+        let hello = dir.create_dir("hello.txt");
+        assert!(hello.is_ok());
     }
 }
