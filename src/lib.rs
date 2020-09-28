@@ -147,7 +147,7 @@ mod fat32 {
         let volume = Volume::new(device);
         let mut root = volume.root_dir();
 
-        let file = root.open_file("abcd.txt");
+        let file = root.open_file("abcdefghigklnmokiaidsiubsbcuicbwdwc.txt");
         assert!(file.is_ok());
         let file = file.unwrap();
         let mut buf = [0; BUFFER_SIZE];

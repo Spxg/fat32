@@ -113,12 +113,9 @@ impl<'a, T> Dir<'a, T>
         });
 
         if let Some(_) = res {
-            count -= 1;
-            let loop_count = count;
-
-            for _ in 0..loop_count {
+            for c in (1..count).rev() {
                 let value = &value[0..index];
-                index = get_lfn_index(value, count);
+                index = get_lfn_index(value, c);
 
                 let next = iter.next().unwrap();
                 if next.lfn_equal(&value[index..]) {
@@ -142,28 +139,51 @@ impl<'a, T> Dir<'a, T>
             };
         }
 
+        let blank_cluster = self.fat.blank_cluster();
+
+        match sfn_or_lfn(value) {
+            NameType::SFN => {
+                let di = DirectoryItem::new_sfn(blank_cluster,
+                                                value,
+                                                create_type);
+                self.write_directory_item(di);
+            }
+            NameType::LFN => {
+                let num_char = value.chars().count();
+                let count = get_count_of_lfn(num_char);
+                let mut lfn_index = get_lfn_index(value, count);
+
+                let di = DirectoryItem::new_lfn((count as u8) | (1 << 6)
+                                                , &value[lfn_index..]);
+
+                self.write_directory_item(di);
+
+                for c in (1..count).rev() {
+                    let value = &value[0..lfn_index];
+                    lfn_index = get_lfn_index(value, c);
+                    let di = DirectoryItem::new_lfn(c as u8, value);
+                    self.write_directory_item(di);
+                }
+            }
+        }
+
+        self.fat.write(blank_cluster, 0x0FFFFFFF);
+
+        Ok(())
+    }
+
+    fn write_directory_item(&self, di: DirectoryItem) {
         let offset = self.bpb.offset(self.detail.cluster());
         let bps = self.bpb.byte_per_sector_usize();
 
         let mut iter = DirIter::new(offset, bps, self.device);
         iter.find(|_| false);
         let index = iter.index;
-        let blank_cluster = self.fat.blank_cluster();
 
-        match sfn_or_lfn(value) {
-            NameType::SFN => {
-                let di = DirectoryItem::new_sfn(blank_cluster, value, create_type);
-                iter.buffer[index..index + 32].copy_from_slice(&di.bytes());
-                self.device.write(&iter.buffer,
-                                  offset,
-                                  1).unwrap();
-            }
-            NameType::LFN => {}
-        }
-
-        self.fat.write(blank_cluster, 0x0FFFFFFF);
-
-        Ok(())
+        iter.buffer[index..index + 32].copy_from_slice(&di.bytes());
+        self.device.write(&iter.buffer,
+                          offset,
+                          1).unwrap();
     }
 }
 

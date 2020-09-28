@@ -173,6 +173,44 @@ pub struct LongDirectoryItem {
 }
 
 impl LongDirectoryItem {
+    fn new(attribute: u8, value: &str) -> Self {
+        let mut buf = [0; 32];
+        buf[0x00] = attribute;
+        LongDirectoryItem::write_unicode(value, &mut buf);
+        LongDirectoryItem::from_buf(&buf)
+    }
+
+    fn write_unicode(value: &str, buf: &mut [u8]) {
+        let mut temp = [0xFF; 26];
+        let mut index = 0;
+
+        for i in value.encode_utf16() {
+            let part1 = (i & 0xFF) as u8;
+            let part2 = ((i & 0xFF00) >> 8) as u8;
+            temp[index] = part1;
+            temp[index + 1] = part2;
+            index += 2;
+        }
+
+        if index != 26 {
+            temp[index] = 0;
+            temp[index + 1] = 0;
+        }
+        index = 0;
+
+        let mut op = |start: usize, end: usize| {
+            for i in (start..end).step_by(2) {
+                buf[i] = temp[index];
+                buf[i + 1] = temp[index + 1];
+                index += 2;
+            }
+        };
+
+        op(0x01, 0x0A);
+        op(0x0E, 0x19);
+        op(0x1C, 0x1F);
+    }
+
     fn from_buf(buf: &[u8]) -> Self {
         let attribute = buf[0x00];
         let mut unicode_part1 = [0; 10];
@@ -236,6 +274,15 @@ impl LongDirectoryItem {
     fn is_name_end(&self) -> bool {
         (self.attribute & 0x40) == 0x40
     }
+
+    fn bytes(&self) -> [u8; 32] {
+        let mut buf = [0; 32];
+        buf[0x00] = self.attribute;
+        buf[0x01..0x0B].copy_from_slice(&self.unicode_part1);
+        buf[0x0E..0x1A].copy_from_slice(&self.unicode_part2);
+        buf[0x1C..0x20].copy_from_slice(&self.unicode_part3);
+        buf
+    }
 }
 
 #[derive(Default, Copy, Clone, Debug)]
@@ -294,7 +341,15 @@ impl DirectoryItem {
         if self.short.is_some() {
             self.short.unwrap().bytes(self.item_type)
         } else {
-            [0; 32]
+            self.long.unwrap().bytes()
+        }
+    }
+
+    pub(crate) fn new_lfn(attribute: u8, value: &str) -> Self {
+        Self {
+            item_type: ItemType::LFN,
+            short: None,
+            long: Some(LongDirectoryItem::new(attribute, value)),
         }
     }
 
@@ -302,7 +357,7 @@ impl DirectoryItem {
         Self {
             item_type: ItemType::from_create(create_type),
             short: Some(ShortDirectoryItem::new(cluster, value, create_type)),
-            long: None
+            long: None,
         }
     }
 
@@ -325,14 +380,14 @@ impl DirectoryItem {
                 Self {
                     item_type,
                     short: None,
-                    long: Some(LongDirectoryItem::from_buf(buf))
+                    long: Some(LongDirectoryItem::from_buf(buf)),
                 }
             }
             _ => {
                 Self {
                     item_type,
                     short: Some(ShortDirectoryItem::from_buf(buf)),
-                    long: None
+                    long: None,
                 }
             }
         }
