@@ -14,6 +14,7 @@ use crate::bpb::BIOSParameterBlock;
 use crate::BUFFER_SIZE;
 use crate::dir::Dir;
 use crate::directory_item::DirectoryItem;
+use crate::fat::FAT;
 
 #[derive(Copy, Clone)]
 pub struct Volume<T>
@@ -73,6 +74,9 @@ impl<T> Volume<T>
             device: self.device,
             bpb: &self.bpb,
             detail: DirectoryItem::root_dir(self.bpb.root_cluster),
+            fat: FAT::new(self.bpb.root_cluster,
+                          self.device,
+                          self.bpb.fat1())
         }
     }
 }

@@ -11,6 +11,7 @@ pub struct FAT<T>
     start_cluster: u32,
     pub(crate) current_cluster: u32,
     next_cluster: Option<u32>,
+    buffer: [u8; BUFFER_SIZE],
 }
 
 impl<T> FAT<T>
@@ -23,7 +24,38 @@ impl<T> FAT<T>
             start_cluster: cluster,
             current_cluster: 0,
             next_cluster: None,
+            buffer: [0; 512],
         }
+    }
+
+    pub(crate) fn blank_cluster(&mut self) -> u32 {
+        let mut cluster = 0;
+        let mut done = false;
+
+        for block in 0.. {
+            self.device.read(&mut self.buffer,
+                             self.fat_offset + block * BUFFER_SIZE).unwrap();
+            for i in (0..BUFFER_SIZE).step_by(4) {
+                if self.buffer[i] == 0x0 { done = true; break; } else { cluster += 1; }
+            }
+            if done { break; }
+        }
+        cluster
+    }
+
+    pub(crate) fn write(&mut self, cluster: u32, value: u32) {
+        let offset = (cluster as usize) * 4;
+        let block_offset = offset / BUFFER_SIZE;
+        let offset_left = offset % BUFFER_SIZE;
+        let offset = self.fat_offset + block_offset * BUFFER_SIZE;
+        let mut value: [u8; 4] = value.to_be_bytes();
+        value.reverse();
+
+        self.device.read(&mut self.buffer,
+                         offset).unwrap();
+        self.buffer[offset_left..offset_left + 4].copy_from_slice(&value);
+        self.device.write(&self.buffer,
+                          offset).unwrap();
     }
 
     fn current_cluster_usize(&self) -> usize {
@@ -37,8 +69,6 @@ impl<T> Iterator for FAT<T>
     type Item = Self;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut buf = [0; BUFFER_SIZE];
-
         if self.current_cluster == 0 {
             self.current_cluster = self.start_cluster;
         } else {
@@ -54,10 +84,10 @@ impl<T> Iterator for FAT<T>
         let block_offset = offset / BUFFER_SIZE;
         let offset_left = offset % BUFFER_SIZE;
 
-        self.device.read(&mut buf,
+        self.device.read(&mut self.buffer,
                          self.fat_offset + block_offset).unwrap();
 
-        let next_cluster = read_le_u32(&buf[offset_left..offset_left + 4]);
+        let next_cluster = read_le_u32(&self.buffer[offset_left..offset_left + 4]);
         let next_cluster = if next_cluster == 0x0FFFFFFF {
             None
         } else {

@@ -1,6 +1,6 @@
 use core::str;
-use core::ops::Deref;
 use crate::tool::read_le_u32;
+use crate::dir::CreateType;
 
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 pub enum ItemType {
@@ -18,6 +18,13 @@ impl ItemType {
             ItemType::LFN
         } else {
             ItemType::File
+        }
+    }
+
+    fn from_create(value: CreateType) -> ItemType {
+        match value {
+            CreateType::Dir => ItemType::Dir,
+            CreateType::File => ItemType::File
         }
     }
 }
@@ -43,15 +50,42 @@ pub struct ShortDirectoryItem {
 }
 
 impl ShortDirectoryItem {
-    fn root_dir(cluster: u32) -> _DirectoryItem {
-        let s = Self {
-            cluster,
-            ..Self::default()
+    fn new(cluster: u32, value: &str, create_type: CreateType) -> Self {
+        let (name, extension) = match value.find('.') {
+            Some(i) => (&value[0..i], &value[i + 1..]),
+            None => (&value[0..], "")
         };
-        _DirectoryItem::from_short(s)
+
+        let mut item = [0; 32];
+        let _item = [0x20; 11];
+        item[0x00..0x0B].copy_from_slice(&_item);
+        item[0x00..0x00 + name.len()].copy_from_slice(name.as_bytes());
+        item[0x08..0x08 + extension.len()].copy_from_slice(extension.as_bytes());
+        item[0x00..0x00 + name.len()].make_ascii_uppercase();
+        item[0x08..0x08 + extension.len()].make_ascii_uppercase();
+
+        let mut cluster: [u8; 4] = cluster.to_be_bytes();
+        cluster.reverse();
+
+        item[0x14..0x16].copy_from_slice(&cluster[2..4]);
+        item[0x1A..0x1C].copy_from_slice(&cluster[0..2]);
+
+        match create_type {
+            CreateType::Dir => item[0x0B] = 0x10,
+            CreateType::File => item[0x10] = 0x20,
+        }
+
+        ShortDirectoryItem::from_buf(&item)
     }
 
-    fn from_buf(buf: &[u8]) -> _DirectoryItem {
+    fn root_dir(cluster: u32) -> Self {
+        Self {
+            cluster,
+            ..Self::default()
+        }
+    }
+
+    fn from_buf(buf: &[u8]) -> Self {
         let mut name = [0; 8];
         let mut extension = [0; 3];
         let create_time = [buf[0x0F], buf[0x0E]];
@@ -61,9 +95,9 @@ impl ShortDirectoryItem {
         let edit_date = [buf[0x19], buf[0x18]];
 
         name.copy_from_slice(&buf[0x00..0x08]);
-        extension.copy_from_slice(&buf[0x08..0x0b]);
+        extension.copy_from_slice(&buf[0x08..0x0B]);
 
-        let s = Self {
+        Self {
             name,
             extension,
             create_ms: buf[0x0D],
@@ -77,9 +111,7 @@ impl ShortDirectoryItem {
                 | ((buf[0x1B] as u32) << 8)
                 | (buf[0x1A] as u32),
             length: read_le_u32(&buf[0x1C..0x20]),
-        };
-
-        _DirectoryItem::from_short(s)
+        }
     }
 
     fn get_full_name_bytes(&self) -> ([u8; 12], usize) {
@@ -107,6 +139,29 @@ impl ShortDirectoryItem {
 
         (full_name, len)
     }
+
+    fn bytes(&self, item_type: ItemType) -> [u8; 32] {
+        let mut item = [0; 32];
+
+        item[0x00..0x08].copy_from_slice(&self.name);
+        item[0x08..0x0B].copy_from_slice(&self.extension);
+
+        let mut cluster: [u8; 4] = self.cluster.to_be_bytes();
+        cluster.reverse();
+
+        item[0x14..0x16].copy_from_slice(&cluster[2..4]);
+        item[0x1A..0x1C].copy_from_slice(&cluster[0..2]);
+        item[0x0C] = 0x18;
+
+        match item_type {
+            ItemType::Dir => item[0x0B] = 0x10,
+            ItemType::File => item[0x0B] = 0x20,
+            ItemType::LFN => item[0x0B] = 0x0F,
+            ItemType::Deleted => item[0x00] = 0xE5
+        }
+
+        item
+    }
 }
 
 #[derive(Default, Copy, Clone, Debug)]
@@ -118,7 +173,7 @@ pub struct LongDirectoryItem {
 }
 
 impl LongDirectoryItem {
-    fn from_buf(buf: &[u8]) -> _DirectoryItem {
+    fn from_buf(buf: &[u8]) -> Self {
         let attribute = buf[0x00];
         let mut unicode_part1 = [0; 10];
         let mut unicode_part2 = [0; 12];
@@ -128,14 +183,12 @@ impl LongDirectoryItem {
         unicode_part2.copy_from_slice(&buf[0x0E..0x1A]);
         unicode_part3.copy_from_slice(&buf[0x1C..0x20]);
 
-        let l = Self {
+        Self {
             attribute,
             unicode_part1,
             unicode_part2,
             unicode_part3,
-        };
-
-        _DirectoryItem::from_long(l)
+        }
     }
 
     fn to_utf8(&self) -> ([u8; 13 * 3], usize) {
@@ -186,28 +239,15 @@ impl LongDirectoryItem {
 }
 
 #[derive(Default, Copy, Clone, Debug)]
-pub struct _DirectoryItem {
+pub struct DirectoryItem {
+    pub(crate) item_type: ItemType,
     short: Option<ShortDirectoryItem>,
     long: Option<LongDirectoryItem>,
 }
 
-impl _DirectoryItem {
+impl DirectoryItem {
     pub(crate) fn cluster(&self) -> u32 {
         self.short.unwrap().cluster
-    }
-
-    fn from_short(value: ShortDirectoryItem) -> Self {
-        Self {
-            short: Some(value),
-            long: None,
-        }
-    }
-
-    fn from_long(value: LongDirectoryItem) -> Self {
-        Self {
-            short: None,
-            long: Some(value),
-        }
     }
 
     fn get_sfn(&self) -> Option<([u8; 12], usize)> {
@@ -249,19 +289,26 @@ impl _DirectoryItem {
             None
         }
     }
-}
 
-#[derive(Default, Copy, Clone, Debug)]
-pub struct DirectoryItem {
-    pub(crate) item_type: ItemType,
-    pub(crate) item: _DirectoryItem,
-}
+    pub(crate) fn bytes(&self) -> [u8; 32] {
+        if self.short.is_some() {
+            self.short.unwrap().bytes(self.item_type)
+        } else {
+            [0; 32]
+        }
+    }
 
-impl DirectoryItem {
-    // pub(crate) fn new_sfn(cluster: u32, name: &str, ex)
+    pub(crate) fn new_sfn(cluster: u32, value: &str, create_type: CreateType) -> Self {
+        Self {
+            item_type: ItemType::from_create(create_type),
+            short: Some(ShortDirectoryItem::new(cluster, value, create_type)),
+            long: None
+        }
+    }
+
     pub(crate) fn root_dir(cluster: u32) -> Self {
         Self {
-            item: ShortDirectoryItem::root_dir(cluster),
+            short: Some(ShortDirectoryItem::root_dir(cluster)),
             ..Self::default()
         }
     }
@@ -273,20 +320,27 @@ impl DirectoryItem {
             ItemType::from_value(buf[0x0B])
         };
 
-        let item = match item_type {
-            ItemType::LFN => LongDirectoryItem::from_buf(buf),
-            _ => ShortDirectoryItem::from_buf(buf)
-        };
-
-        Self {
-            item_type,
-            item,
+        match item_type {
+            ItemType::LFN => {
+                Self {
+                    item_type,
+                    short: None,
+                    long: Some(LongDirectoryItem::from_buf(buf))
+                }
+            }
+            _ => {
+                Self {
+                    item_type,
+                    short: Some(ShortDirectoryItem::from_buf(buf)),
+                    long: None
+                }
+            }
         }
     }
 
     pub(crate) fn sfn_equal(&self, value: &str) -> bool {
         if self.is_deleted() { return false; }
-        let option = self.item.get_sfn();
+        let option = self.get_sfn();
         if option.is_none() { return false; }
         let (bytes, len) = option.unwrap();
         if let Ok(res) = str::from_utf8(&bytes[0..len]) {
@@ -298,7 +352,7 @@ impl DirectoryItem {
 
     pub(crate) fn lfn_equal(&self, value: &str) -> bool {
         if self.is_deleted() { return false; }
-        let option = self.item.get_lfn();
+        let option = self.get_lfn();
         if option.is_none() { return false; }
         let (bytes, len) = option.unwrap();
         if let Ok(res) = str::from_utf8(&bytes[0..len]) {
@@ -322,13 +376,5 @@ impl DirectoryItem {
 
     pub(crate) fn is_file(&self) -> bool {
         ItemType::File == self.item_type
-    }
-}
-
-impl Deref for DirectoryItem {
-    type Target = _DirectoryItem;
-
-    fn deref(&self) -> &Self::Target {
-        &self.item
     }
 }

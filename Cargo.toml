@@ -11,7 +11,7 @@ readme = "README.md"
 license = "MIT"
 
 [dependencies]
-winapi = { version = "0.3", features = ["fileapi"] }
+winapi = { version = "0.3", features = ["fileapi", "winioctl", "ioapiset"] }
 
 [dependencies.block_device]
 version = "0.1"

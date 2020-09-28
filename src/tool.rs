@@ -32,17 +32,18 @@ pub(crate) fn is_illegal(chs: &str) -> bool {
 }
 
 pub(crate) fn sfn_or_lfn(value: &str) -> NameType {
-    let part = match value.find('.') {
+    let (name, extension) = match value.find('.') {
         Some(i) => (&value[0..i], &value[i + 1..]),
         None => (&value[0..], "")
     };
 
     if value.is_ascii()
+        && value.contains(|ch: char| ch.is_ascii_lowercase())
         && !value.contains(' ')
-        && !part.0.contains('.')
-        && !part.1.contains('.')
-        && part.0.len() <= 8
-        && part.1.len() <= 3 {
+        && !name.contains('.')
+        && !extension.contains('.')
+        && name.len() <= 8
+        && extension.len() <= 3 {
         NameType::SFN
     } else {
         NameType::LFN

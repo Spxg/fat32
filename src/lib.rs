@@ -49,7 +49,7 @@ mod fat32 {
 
     impl Device {
         fn mount() -> Self {
-            let disk = "\\\\.\\F:";
+            let disk = "\\\\.\\E:";
             let handle = unsafe {
                 fileapi::CreateFileA(disk.as_ptr() as *const i8,
                                      GENERIC_READ | GENERIC_WRITE,
@@ -143,33 +143,9 @@ mod fat32 {
     fn test_all() {
         let device = Device::mount();
         let volume = Volume::new(device);
-        let root = volume.root_dir();
+        let mut root = volume.root_dir();
 
-        // directory item test
-        let dir = root.cd("这是一个测试-Rust");
-        assert!(dir.is_ok());
-        let mut dir = dir.unwrap();
-        let dot_dir = dir.cd("1.1.1.1");
-        assert!(dot_dir.is_ok());
-        let exist = dir.exist("Rust牛逼.txt");
-        assert!(exist.is_some());
-        let exist = dir.exist("cnb.txt");
-        assert!(exist.is_some());
-        let not_exist = root.cd("not_exist_dir");
-        assert_eq!(DirError::NoMatchDir, not_exist.err().unwrap());
-
-        // read file test
-        let cnb = dir.open_file("cnb.txt");
-        assert!(cnb.is_ok());
-        let cnb = cnb.unwrap();
-        let mut buf = [0; BUFFER_SIZE];
-        let read = cnb.read(&mut buf);
-        assert!(read.is_ok());
-        let length = read.unwrap();
-        assert_eq!("c牛逼", str::from_utf8(&buf[0..length]).unwrap());
-
-        // create test
-        let hello = dir.create_dir("hello.txt");
+        let hello = root.create_dir("hello.txt");
         assert!(hello.is_ok());
     }
 }

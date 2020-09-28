@@ -21,7 +21,8 @@ pub enum DirError {
     FileHasExist,
 }
 
-enum CreateType {
+#[derive(Clone, Copy)]
+pub enum CreateType {
     Dir,
     File,
 }
@@ -33,16 +34,17 @@ pub struct Dir<'a, T>
     pub(crate) device: T,
     pub(crate) bpb: &'a BIOSParameterBlock,
     pub(crate) detail: DirectoryItem,
+    pub(crate) fat: FAT<T>,
 }
 
 impl<'a, T> Dir<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
-    pub fn create_dir(&self, dir: &str) -> Result<(), DirError> {
+    pub fn create_dir(&mut self, dir: &str) -> Result<(), DirError> {
         self.create(dir, CreateType::Dir)
     }
 
-    pub fn create_file(&self, file: &str) -> Result<(), DirError> {
+    pub fn create_file(&mut self, file: &str) -> Result<(), DirError> {
         self.create(file, CreateType::File)
     }
 
@@ -76,6 +78,7 @@ impl<'a, T> Dir<'a, T>
                     device: self.device,
                     bpb: self.bpb,
                     detail: di,
+                    fat: self.fat,
                 })
             } else {
                 Err(DirError::NoMatchDir)
@@ -84,7 +87,7 @@ impl<'a, T> Dir<'a, T>
     }
 
     pub fn exist(&self, value: &str) -> Option<DirectoryItem> {
-        let offset = self.bpb.offset(self.detail.item.cluster());
+        let offset = self.bpb.offset(self.detail.cluster());
         let bps = self.bpb.byte_per_sector_usize();
         let mut iter = DirIter::new(offset, bps, self.device);
 
@@ -130,17 +133,30 @@ impl<'a, T> Dir<'a, T>
         if has_match { iter.next() } else { None }
     }
 
-    fn create(&self, value: &str, create_type: CreateType) -> Result<(), DirError> {
+    fn create(&mut self, value: &str, create_type: CreateType) -> Result<(), DirError> {
         if is_illegal(value) { return Err(DirError::IllegalChar); }
         if let Some(_) = self.exist(value) {
             return match create_type {
                 CreateType::Dir => Err(DirError::DirHasExist),
                 CreateType::File => Err(DirError::FileHasExist)
-            }
+            };
         }
 
+        let offset = self.bpb.offset(self.detail.cluster());
+        let bps = self.bpb.byte_per_sector_usize();
+
+        let mut iter = DirIter::new(offset, bps, self.device);
+        iter.find(|_| false);
+        let index = iter.index;
+
         match sfn_or_lfn(value) {
-            NameType::SFN => {}
+            NameType::SFN => {
+                let blank_cluster = self.fat.blank_cluster();
+                let di = DirectoryItem::new_sfn(blank_cluster, value, create_type);
+                iter.buffer[index..index + 32].copy_from_slice(&di.bytes());
+                self.device.write(&iter.buffer, offset).unwrap();
+                self.fat.write(blank_cluster, 0x0FFFFFFF);
+            }
             NameType::LFN => {}
         }
 
