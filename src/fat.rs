@@ -34,9 +34,13 @@ impl<T> FAT<T>
 
         for block in 0.. {
             self.device.read(&mut self.buffer,
-                             self.fat_offset + block * BUFFER_SIZE).unwrap();
+                             self.fat_offset + block * BUFFER_SIZE,
+                             1).unwrap();
             for i in (0..BUFFER_SIZE).step_by(4) {
-                if self.buffer[i] == 0x0 { done = true; break; } else { cluster += 1; }
+                if self.buffer[i] == 0x0 {
+                    done = true;
+                    break;
+                } else { cluster += 1; }
             }
             if done { break; }
         }
@@ -52,10 +56,12 @@ impl<T> FAT<T>
         value.reverse();
 
         self.device.read(&mut self.buffer,
-                         offset).unwrap();
+                         offset,
+                         1).unwrap();
         self.buffer[offset_left..offset_left + 4].copy_from_slice(&value);
         self.device.write(&self.buffer,
-                          offset).unwrap();
+                          offset,
+                          1).unwrap();
     }
 
     fn current_cluster_usize(&self) -> usize {
@@ -85,7 +91,8 @@ impl<T> Iterator for FAT<T>
         let offset_left = offset % BUFFER_SIZE;
 
         self.device.read(&mut self.buffer,
-                         self.fat_offset + block_offset).unwrap();
+                         self.fat_offset + block_offset,
+                         1).unwrap();
 
         let next_cluster = read_le_u32(&self.buffer[offset_left..offset_left + 4]);
         let next_cluster = if next_cluster == 0x0FFFFFFF {

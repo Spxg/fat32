@@ -148,17 +148,20 @@ impl<'a, T> Dir<'a, T>
         let mut iter = DirIter::new(offset, bps, self.device);
         iter.find(|_| false);
         let index = iter.index;
+        let blank_cluster = self.fat.blank_cluster();
 
         match sfn_or_lfn(value) {
             NameType::SFN => {
-                let blank_cluster = self.fat.blank_cluster();
                 let di = DirectoryItem::new_sfn(blank_cluster, value, create_type);
                 iter.buffer[index..index + 32].copy_from_slice(&di.bytes());
-                self.device.write(&iter.buffer, offset).unwrap();
-                self.fat.write(blank_cluster, 0x0FFFFFFF);
+                self.device.write(&iter.buffer,
+                                  offset,
+                                  1).unwrap();
             }
             NameType::LFN => {}
         }
+
+        self.fat.write(blank_cluster, 0x0FFFFFFF);
 
         Ok(())
     }
@@ -216,7 +219,8 @@ impl<T> Iterator for DirIter<T>
         if self.index % BUFFER_SIZE == 0 {
             let offset = self.offset_value();
             self.device.read(&mut self.buffer,
-                             offset).unwrap();
+                             offset,
+                             1).unwrap();
             self.index = 0;
             self.num_offset += 1;
         }

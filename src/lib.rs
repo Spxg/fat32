@@ -92,12 +92,13 @@ mod fat32 {
 
         fn _read(&self,
                  buf: &mut [u8],
+                 number_of_blocks: usize,
                  number_of_bytes_read: &mut c_ulong,
         ) -> bool {
             let bool_int = unsafe {
                 fileapi::ReadFile(self.handle,
                                   buf.as_ptr() as *mut c_void,
-                                  BUFFER_SIZE as c_ulong,
+                                  (BUFFER_SIZE * number_of_blocks) as c_ulong,
                                   number_of_bytes_read as *mut c_ulong,
                                   ptr::null_mut())
             };
@@ -107,12 +108,13 @@ mod fat32 {
 
         fn _write(&self,
                   buf: &[u8],
+                  number_of_blocks: usize,
                   number_of_bytes_write: &mut c_ulong,
         ) -> bool {
             let bool_int = unsafe {
                 fileapi::WriteFile(self.handle,
                                    buf.as_ptr() as *const c_void,
-                                   BUFFER_SIZE as c_ulong,
+                                   (BUFFER_SIZE * number_of_blocks) as c_ulong,
                                    number_of_bytes_write as *mut c_ulong,
                                    ptr::null_mut())
             };
@@ -124,17 +126,17 @@ mod fat32 {
     impl BlockDevice for Device {
         type Error = DeviceError;
 
-        fn read(&self, buf: &mut [u8], address: usize) -> Result<(), Self::Error> {
+        fn read(&self, buf: &mut [u8], address: usize, number_of_blocks: usize) -> Result<(), Self::Error> {
             let mut len = 0;
             self.set_file_pointer(address as i32);
-            let res = self._read(buf, &mut len);
+            let res = self._read(buf, number_of_blocks,&mut len);
             if res { Ok(()) } else { Err(DeviceError::ReadError) }
         }
 
-        fn write(&self, buf: &[u8], address: usize) -> Result<(), Self::Error> {
+        fn write(&self, buf: &[u8], address: usize, number_of_blocks: usize) -> Result<(), Self::Error> {
             let mut len = 0;
             self.set_file_pointer(address as i32);
-            let res = self._write(buf, &mut len);
+            let res = self._write(buf, number_of_blocks,&mut len);
             if res { Ok(()) } else { Err(DeviceError::WriteError) }
         }
     }
@@ -145,7 +147,11 @@ mod fat32 {
         let volume = Volume::new(device);
         let mut root = volume.root_dir();
 
-        let hello = root.create_dir("hello.txt");
-        assert!(hello.is_ok());
+        let file = root.open_file("abcd.txt");
+        assert!(file.is_ok());
+        let file = file.unwrap();
+        let mut buf = [0; BUFFER_SIZE];
+        let len = file.read(&mut buf).unwrap();
+        assert_eq!("12345，Rust牛逼", str::from_utf8(&buf[0..len]).unwrap());
     }
 }

@@ -38,7 +38,7 @@ pub(crate) fn sfn_or_lfn(value: &str) -> NameType {
     };
 
     if value.is_ascii()
-        && value.contains(|ch: char| ch.is_ascii_lowercase())
+        && !value.contains(|ch: char| ch.is_ascii_uppercase())
         && !value.contains(' ')
         && !name.contains('.')
         && !extension.contains('.')
