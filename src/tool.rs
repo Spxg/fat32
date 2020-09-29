@@ -55,6 +55,30 @@ pub(crate) fn get_count_of_lfn(value: usize) -> usize {
 }
 
 pub(crate) fn get_lfn_index(value_str: &str, count: usize) -> usize {
-    let num = 13 * (count - 1);
-    value_str.chars().enumerate().nth(num).unwrap().0
+    let end = 13 * (count - 1);
+    let mut len = 0;
+    for (index, ch) in value_str.chars().enumerate() {
+        if (0..end).contains(&index) {
+            len += ch.len_utf8();
+        }
+    }
+    len
+}
+
+pub(crate) fn generate_checksum(value: &[u8]) -> u8 {
+    let mut checksum = 0;
+    for &i in value {
+        checksum = (if checksum & 1 == 1 {
+            0x80
+        } else {
+            0
+        } + (checksum >> 1) + i as u32) & 0xFF;
+    }
+    checksum as u8
+}
+
+pub(crate) fn random_str_bytes() -> Result<[u8; 11], getrandom::Error> {
+    let mut bytes = [0u8; 11];
+    getrandom::getrandom(&mut bytes)?;
+    Ok(bytes)
 }

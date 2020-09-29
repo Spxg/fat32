@@ -78,6 +78,24 @@ impl ShortDirectoryItem {
         ShortDirectoryItem::from_buf(&item)
     }
 
+    fn new_bytes(cluster: u32, value: &[u8], create_type: CreateType) -> Self {
+        let mut item = [0; 32];
+        item[0x00..0x0B].copy_from_slice(value);
+
+        let mut cluster: [u8; 4] = cluster.to_be_bytes();
+        cluster.reverse();
+
+        item[0x14..0x16].copy_from_slice(&cluster[2..4]);
+        item[0x1A..0x1C].copy_from_slice(&cluster[0..2]);
+
+        match create_type {
+            CreateType::Dir => item[0x0B] = 0x10,
+            CreateType::File => item[0x10] = 0x20,
+        }
+
+        ShortDirectoryItem::from_buf(&item)
+    }
+
     fn root_dir(cluster: u32) -> Self {
         Self {
             cluster,
@@ -167,15 +185,17 @@ impl ShortDirectoryItem {
 #[derive(Default, Copy, Clone, Debug)]
 pub struct LongDirectoryItem {
     attribute: u8,
+    check_sum: u8,
     unicode_part1: [u8; 10],
     unicode_part2: [u8; 12],
     unicode_part3: [u8; 4],
 }
 
 impl LongDirectoryItem {
-    fn new(attribute: u8, value: &str) -> Self {
+    fn new(attribute: u8, check_sum: u8, value: &str) -> Self {
         let mut buf = [0; 32];
         buf[0x00] = attribute;
+        buf[0x0D] = check_sum;
         LongDirectoryItem::write_unicode(value, &mut buf);
         LongDirectoryItem::from_buf(&buf)
     }
@@ -213,6 +233,7 @@ impl LongDirectoryItem {
 
     fn from_buf(buf: &[u8]) -> Self {
         let attribute = buf[0x00];
+        let check_sum = buf[0x0D];
         let mut unicode_part1 = [0; 10];
         let mut unicode_part2 = [0; 12];
         let mut unicode_part3 = [0; 4];
@@ -223,6 +244,7 @@ impl LongDirectoryItem {
 
         Self {
             attribute,
+            check_sum,
             unicode_part1,
             unicode_part2,
             unicode_part3,
@@ -278,6 +300,9 @@ impl LongDirectoryItem {
     fn bytes(&self) -> [u8; 32] {
         let mut buf = [0; 32];
         buf[0x00] = self.attribute;
+        buf[0x0B] = 0x0F;
+        buf[0x0D] = self.check_sum;
+
         buf[0x01..0x0B].copy_from_slice(&self.unicode_part1);
         buf[0x0E..0x1A].copy_from_slice(&self.unicode_part2);
         buf[0x1C..0x20].copy_from_slice(&self.unicode_part3);
@@ -345,11 +370,11 @@ impl DirectoryItem {
         }
     }
 
-    pub(crate) fn new_lfn(attribute: u8, value: &str) -> Self {
+    pub(crate) fn new_lfn(attribute: u8, check_sum: u8, value: &str) -> Self {
         Self {
             item_type: ItemType::LFN,
             short: None,
-            long: Some(LongDirectoryItem::new(attribute, value)),
+            long: Some(LongDirectoryItem::new(attribute, check_sum, value)),
         }
     }
 
@@ -357,6 +382,14 @@ impl DirectoryItem {
         Self {
             item_type: ItemType::from_create(create_type),
             short: Some(ShortDirectoryItem::new(cluster, value, create_type)),
+            long: None,
+        }
+    }
+
+    pub(crate) fn new_sfn_bytes(cluster: u32, value: &[u8], create_type: CreateType) -> Self {
+        Self {
+            item_type: ItemType::from_create(create_type),
+            short: Some(ShortDirectoryItem::new_bytes(cluster, value, create_type)),
             long: None,
         }
     }

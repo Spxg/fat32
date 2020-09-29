@@ -24,7 +24,11 @@ mod fat32 {
     use core::ptr;
     use core::str;
     use crate::volume::Volume;
-    use self::winapi::ctypes::{c_void, c_ulong, c_long};
+    use self::winapi::ctypes::{
+        c_void,
+        c_ulong,
+        c_long,
+    };
     use crate::dir::DirError;
     use crate::BUFFER_SIZE;
 
@@ -129,14 +133,14 @@ mod fat32 {
         fn read(&self, buf: &mut [u8], address: usize, number_of_blocks: usize) -> Result<(), Self::Error> {
             let mut len = 0;
             self.set_file_pointer(address as i32);
-            let res = self._read(buf, number_of_blocks,&mut len);
+            let res = self._read(buf, number_of_blocks, &mut len);
             if res { Ok(()) } else { Err(DeviceError::ReadError) }
         }
 
         fn write(&self, buf: &[u8], address: usize, number_of_blocks: usize) -> Result<(), Self::Error> {
             let mut len = 0;
             self.set_file_pointer(address as i32);
-            let res = self._write(buf, number_of_blocks,&mut len);
+            let res = self._write(buf, number_of_blocks, &mut len);
             if res { Ok(()) } else { Err(DeviceError::WriteError) }
         }
     }
@@ -147,11 +151,7 @@ mod fat32 {
         let volume = Volume::new(device);
         let mut root = volume.root_dir();
 
-        let file = root.open_file("abcdefghigklnmokiaidsiubsbcuicbwdwc.txt");
+        let file = root.create_dir("abcdefghigklmn");
         assert!(file.is_ok());
-        let file = file.unwrap();
-        let mut buf = [0; BUFFER_SIZE];
-        let len = file.read(&mut buf).unwrap();
-        assert_eq!("12345，Rust牛逼", str::from_utf8(&buf[0..len]).unwrap());
     }
 }
