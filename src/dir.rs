@@ -24,7 +24,7 @@ pub enum DirError {
 }
 
 #[derive(Clone, Copy)]
-pub enum CreateType {
+pub enum OpType {
     Dir,
     File,
 }
@@ -42,12 +42,20 @@ pub struct Dir<'a, T>
 impl<'a, T> Dir<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
+    pub fn delete_dir(&mut self, dir: &str) -> Result<(), DirError> {
+        self.delete(dir, OpType::Dir)
+    }
+
+    pub fn delete_file(&mut self, file: &str) -> Result<(), DirError> {
+        self.delete(file, OpType::File)
+    }
+
     pub fn create_dir(&mut self, dir: &str) -> Result<(), DirError> {
-        self.create(dir, CreateType::Dir)
+        self.create(dir, OpType::Dir)
     }
 
     pub fn create_file(&mut self, file: &str) -> Result<(), DirError> {
-        self.create(file, CreateType::File)
+        self.create(file, OpType::File)
     }
 
     pub fn open_file(&self, file: &str) -> Result<File<'a, T>, DirError> {
@@ -132,12 +140,12 @@ impl<'a, T> Dir<'a, T>
         if has_match { iter.next() } else { None }
     }
 
-    fn create(&mut self, value: &str, create_type: CreateType) -> Result<(), DirError> {
+    fn create(&mut self, value: &str, create_type: OpType) -> Result<(), DirError> {
         if is_illegal(value) { return Err(DirError::IllegalChar); }
         if let Some(_) = self.exist(value) {
             return match create_type {
-                CreateType::Dir => Err(DirError::DirHasExist),
-                CreateType::File => Err(DirError::FileHasExist)
+                OpType::Dir => Err(DirError::DirHasExist),
+                OpType::File => Err(DirError::FileHasExist)
             };
         }
 
@@ -185,6 +193,21 @@ impl<'a, T> Dir<'a, T>
         Ok(())
     }
 
+    fn delete(&mut self, value: &str, delete_type: OpType) -> Result<(), DirError> {
+        if is_illegal(value) { return Err(DirError::IllegalChar); }
+        match self.exist(value) {
+            None => return match delete_type {
+                    OpType::Dir => Err(DirError::NoMatchDir),
+                    OpType::File => Err(DirError::NoMatchFile)
+                },
+            Some(di) => {
+
+            }
+        }
+
+        Ok(())
+    }
+
     fn write_directory_item(&self, di: DirectoryItem) {
         let offset = self.bpb.offset(self.detail.cluster());
         let bps = self.bpb.byte_per_sector_usize();
@@ -192,11 +215,8 @@ impl<'a, T> Dir<'a, T>
         let mut iter = DirIter::new(offset, bps, self.device);
         iter.find(|_| false);
         let index = iter.index;
-
         iter.buffer[index..index + 32].copy_from_slice(&di.bytes());
-        self.device.write(&iter.buffer,
-                          offset,
-                          1).unwrap();
+        iter.update();
     }
 }
 
@@ -241,6 +261,12 @@ impl<T> DirIter<T>
     fn get_part_buf(&mut self) -> &[u8] {
         &self.buffer[self.index..self.index + 32]
     }
+
+    fn update(&self) {
+        self.device.write(&self.buffer,
+                          self.offset_value(),
+                          1).unwrap();
+    }
 }
 
 impl<T> Iterator for DirIter<T>
@@ -254,8 +280,8 @@ impl<T> Iterator for DirIter<T>
             self.device.read(&mut self.buffer,
                              offset,
                              1).unwrap();
+            if self.index != 0 { self.num_offset += 1; }
             self.index = 0;
-            self.num_offset += 1;
         }
 
         if self.is_end() { return None; };

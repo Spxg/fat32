@@ -1,6 +1,6 @@
 use core::str;
 use crate::tool::read_le_u32;
-use crate::dir::CreateType;
+use crate::dir::OpType;
 
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 pub enum ItemType {
@@ -21,10 +21,10 @@ impl ItemType {
         }
     }
 
-    fn from_create(value: CreateType) -> ItemType {
+    fn from_create(value: OpType) -> ItemType {
         match value {
-            CreateType::Dir => ItemType::Dir,
-            CreateType::File => ItemType::File
+            OpType::Dir => ItemType::Dir,
+            OpType::File => ItemType::File
         }
     }
 }
@@ -50,7 +50,7 @@ pub struct ShortDirectoryItem {
 }
 
 impl ShortDirectoryItem {
-    fn new(cluster: u32, value: &str, create_type: CreateType) -> Self {
+    fn new(cluster: u32, value: &str, create_type: OpType) -> Self {
         let (name, extension) = match value.find('.') {
             Some(i) => (&value[0..i], &value[i + 1..]),
             None => (&value[0..], "")
@@ -71,14 +71,14 @@ impl ShortDirectoryItem {
         item[0x1A..0x1C].copy_from_slice(&cluster[0..2]);
 
         match create_type {
-            CreateType::Dir => item[0x0B] = 0x10,
-            CreateType::File => item[0x10] = 0x20,
+            OpType::Dir => item[0x0B] = 0x10,
+            OpType::File => item[0x10] = 0x20,
         }
 
         ShortDirectoryItem::from_buf(&item)
     }
 
-    fn new_bytes(cluster: u32, value: &[u8], create_type: CreateType) -> Self {
+    fn new_bytes(cluster: u32, value: &[u8], create_type: OpType) -> Self {
         let mut item = [0; 32];
         item[0x00..0x0B].copy_from_slice(value);
 
@@ -89,8 +89,8 @@ impl ShortDirectoryItem {
         item[0x1A..0x1C].copy_from_slice(&cluster[0..2]);
 
         match create_type {
-            CreateType::Dir => item[0x0B] = 0x10,
-            CreateType::File => item[0x10] = 0x20,
+            OpType::Dir => item[0x0B] = 0x10,
+            OpType::File => item[0x10] = 0x20,
         }
 
         ShortDirectoryItem::from_buf(&item)
@@ -378,7 +378,7 @@ impl DirectoryItem {
         }
     }
 
-    pub(crate) fn new_sfn(cluster: u32, value: &str, create_type: CreateType) -> Self {
+    pub(crate) fn new_sfn(cluster: u32, value: &str, create_type: OpType) -> Self {
         Self {
             item_type: ItemType::from_create(create_type),
             short: Some(ShortDirectoryItem::new(cluster, value, create_type)),
@@ -386,7 +386,7 @@ impl DirectoryItem {
         }
     }
 
-    pub(crate) fn new_sfn_bytes(cluster: u32, value: &[u8], create_type: CreateType) -> Self {
+    pub(crate) fn new_sfn_bytes(cluster: u32, value: &[u8], create_type: OpType) -> Self {
         Self {
             item_type: ItemType::from_create(create_type),
             short: Some(ShortDirectoryItem::new_bytes(cluster, value, create_type)),
