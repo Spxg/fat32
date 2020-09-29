@@ -34,9 +34,9 @@ impl<'a, T> File<'a, T>
         let mut index = 0;
         self.fat.map(|f| {
             let offset = self.bpb.offset(f.current_cluster);
-            let end = if (buf.len() - index) < cluster_size {
+            let end = if (length - index) < cluster_size {
                 number_of_blocks = 1;
-                index + (buf.len() % cluster_size)
+                index + (length % cluster_size)
             } else {
                 index + cluster_size
             };
