@@ -103,11 +103,18 @@ impl<'a, T> Dir<'a, T>
 
         match sfn_or_lfn(value) {
             NameType::SFN => iter.find(|d| d.sfn_equal(value)),
+            NameType::LFN => self.find_lfn(&mut iter, value),
+        }
+    }
+
+    pub fn exist_iter(&self, iter: &mut DirIter<T>, value: &str) -> Option<DirectoryItem> {
+        match sfn_or_lfn(value) {
+            NameType::SFN => iter.find(|d| d.sfn_equal(value)),
             NameType::LFN => self.find_lfn(iter, value),
         }
     }
 
-    fn find_lfn(&self, mut iter: DirIter<T>, value: &str) -> Option<DirectoryItem> {
+    fn find_lfn(&self, iter: &mut DirIter<T>, value: &str) -> Option<DirectoryItem> {
         let num_char = value.chars().count();
         let count = get_count_of_lfn(num_char);
         let mut index = get_lfn_index(value, count);
@@ -195,16 +202,32 @@ impl<'a, T> Dir<'a, T>
 
     fn delete(&mut self, value: &str, delete_type: OpType) -> Result<(), DirError> {
         if is_illegal(value) { return Err(DirError::IllegalChar); }
-        match self.exist(value) {
-            None => return match delete_type {
-                    OpType::Dir => Err(DirError::NoMatchDir),
-                    OpType::File => Err(DirError::NoMatchFile)
-                },
-            Some(di) => {
+        let offset = self.bpb.offset(self.detail.cluster());
+        let bps = self.bpb.byte_per_sector_usize();
+        let mut iter = DirIter::new(offset, bps, self.device);
 
+        match self.exist_iter(&mut iter, value) {
+            None => return match delete_type {
+                OpType::Dir => Err(DirError::NoMatchDir),
+                OpType::File => Err(DirError::NoMatchFile)
+            },
+            Some(di) => {
+                match delete_type {
+                    OpType::Dir if di.is_file() => return Err(DirError::NoMatchDir),
+                    OpType::File if di.is_dir() => return Err(DirError::NoMatchFile),
+                    _ => {}
+                }
             }
         }
 
+        match sfn_or_lfn(value) {
+            NameType::SFN => {
+                iter.previous();
+                iter.set_deleted();
+                iter.update();
+            }
+            NameType::LFN => {}
+        }
         Ok(())
     }
 
@@ -214,8 +237,7 @@ impl<'a, T> Dir<'a, T>
 
         let mut iter = DirIter::new(offset, bps, self.device);
         iter.find(|_| false);
-        let index = iter.index;
-        iter.buffer[index..index + 32].copy_from_slice(&di.bytes());
+        iter.update_item(&di.bytes());
         iter.update();
     }
 }
@@ -262,6 +284,31 @@ impl<T> DirIter<T>
         &self.buffer[self.index..self.index + 32]
     }
 
+    fn set_deleted(&mut self) {
+        self.buffer[self.index] = 0xE5;
+    }
+
+    fn update_item(&mut self, buf: &[u8]) {
+        self.buffer[self.index..self.index + 32].copy_from_slice(buf)
+    }
+
+    fn previous(&mut self) {
+        if self.index == 0 && self.num_offset != 0 {
+            self.index = BUFFER_SIZE - 32;
+            self.num_offset -= 1;
+            self.update_buffer();
+        } else if self.index != 0 {
+            self.index -= 32;
+        }
+    }
+
+    fn update_buffer(&mut self) {
+        let offset = self.offset_value();
+        self.device.read(&mut self.buffer,
+                         offset,
+                         1).unwrap();
+    }
+
     fn update(&self) {
         self.device.write(&self.buffer,
                           self.offset_value(),
@@ -276,10 +323,7 @@ impl<T> Iterator for DirIter<T>
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index % BUFFER_SIZE == 0 {
-            let offset = self.offset_value();
-            self.device.read(&mut self.buffer,
-                             offset,
-                             1).unwrap();
+            self.update_buffer();
             if self.index != 0 { self.num_offset += 1; }
             self.index = 0;
         }
