@@ -151,8 +151,24 @@ mod fat32 {
         let volume = Volume::new(device);
         let mut root = volume.root_dir();
 
-        let file = root.delete_file("Rust牛逼，C牛逼！！！！！");
-        assert!(file.is_ok());
+        let test_dir = root.create_dir("test_dir");
+        assert!(test_dir.is_ok());
 
+        let test_dir = root.cd("test_dir");
+        assert!(test_dir.is_ok());
+        let mut test_dir = test_dir.unwrap();
+
+        let illegal_char = test_dir.create_file("illegal_char:");
+        assert_eq!(illegal_char.err().unwrap(), DirError::IllegalChar);
+
+        let lfn_file = test_dir.create_file("Rust牛逼");
+        assert!(lfn_file.is_ok());
+
+        let delete_dir = test_dir.delete_dir("Rust牛逼");
+        assert_eq!(delete_dir.err().unwrap(), DirError::NoMatchDir);
+        let delete_file = test_dir.delete_file("Rust牛逼");
+        assert!(delete_file.is_ok());
+        let delete_test_dir = root.delete_dir("test_dir");
+        assert!(delete_test_dir.is_ok());
     }
 }
