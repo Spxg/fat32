@@ -115,8 +115,7 @@ impl<'a, T> Dir<'a, T>
     }
 
     fn find_lfn(&self, iter: &mut DirIter<T>, value: &str) -> Option<DirectoryItem> {
-        let num_char = value.chars().count();
-        let count = get_count_of_lfn(num_char);
+        let count = get_count_of_lfn(value);
         let mut index = get_lfn_index(value, count);
         let mut has_match = true;
 
@@ -169,8 +168,7 @@ impl<'a, T> Dir<'a, T>
                 let sfn = random_str_bytes().unwrap();
                 let check_sum = generate_checksum(&sfn);
 
-                let num_char = value.chars().count();
-                let count = get_count_of_lfn(num_char);
+                let count = get_count_of_lfn(value);
                 let mut lfn_index = get_lfn_index(value, count);
 
                 let di = DirectoryItem::new_lfn((count as u8) | (1 << 6),
@@ -217,6 +215,7 @@ impl<'a, T> Dir<'a, T>
                     OpType::File if di.is_dir() => return Err(DirError::NoMatchFile),
                     _ => {}
                 }
+                self.fat.write(di.cluster(), 0);
             }
         }
 
@@ -226,7 +225,14 @@ impl<'a, T> Dir<'a, T>
                 iter.set_deleted();
                 iter.update();
             }
-            NameType::LFN => {}
+            NameType::LFN => {
+                let count = get_count_of_lfn(value);
+                for _ in 0..=count {
+                    iter.previous();
+                    iter.set_deleted();
+                    iter.update();
+                }
+            }
         }
         Ok(())
     }

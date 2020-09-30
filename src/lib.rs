@@ -151,9 +151,8 @@ mod fat32 {
         let volume = Volume::new(device);
         let mut root = volume.root_dir();
 
-        let file = root.create_file("wdnmd");
+        let file = root.delete_file("Rust牛逼，C牛逼！！！！！");
         assert!(file.is_ok());
-        let delete = root.delete_file("wdnmd");
-        assert!(delete.is_ok());
+
     }
 }

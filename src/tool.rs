@@ -50,8 +50,9 @@ pub(crate) fn sfn_or_lfn(value: &str) -> NameType {
     }
 }
 
-pub(crate) fn get_count_of_lfn(value: usize) -> usize {
-    if value % 13 == 0 { value / 13 } else { value / 13 + 1 }
+pub(crate) fn get_count_of_lfn(value: &str) -> usize {
+    let num_char = value.chars().count();
+    if num_char % 13 == 0 { num_char / 13 } else { num_char / 13 + 1 }
 }
 
 pub(crate) fn get_lfn_index(value_str: &str, count: usize) -> usize {
