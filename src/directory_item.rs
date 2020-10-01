@@ -171,6 +171,10 @@ impl ShortDirectoryItem {
         item[0x1A..0x1C].copy_from_slice(&cluster[0..2]);
         item[0x0C] = 0x18;
 
+        let mut length: [u8; 4] = self.length.to_be_bytes();
+        length.reverse();
+        item[0x1C..0x20].copy_from_slice(&length);
+
         match item_type {
             ItemType::Dir => item[0x0B] = 0x10,
             ItemType::File => item[0x0B] = 0x20,
@@ -324,7 +328,7 @@ impl DirectoryItem {
 
     fn get_sfn(&self) -> Option<([u8; 12], usize)> {
         if self.short.is_some() {
-            Some(self.short.unwrap().get_full_name_bytes())
+            Some(self.short.as_ref().unwrap().get_full_name_bytes())
         } else {
             None
         }
@@ -332,7 +336,7 @@ impl DirectoryItem {
 
     fn get_lfn(&self) -> Option<([u8; 13 * 3], usize)> {
         if self.long.is_some() {
-            Some(self.long.unwrap().to_utf8())
+            Some(self.long.as_ref().unwrap().to_utf8())
         } else {
             None
         }
@@ -340,7 +344,7 @@ impl DirectoryItem {
 
     pub(crate) fn count_of_name(&self) -> Option<usize> {
         if self.long.is_some() {
-            Some(self.long.unwrap().count_of_name())
+            Some(self.long.as_ref().unwrap().count_of_name())
         } else {
             None
         }
@@ -348,7 +352,7 @@ impl DirectoryItem {
 
     pub(crate) fn is_name_end(&self) -> Option<bool> {
         if self.long.is_some() {
-            Some(self.long.unwrap().is_name_end())
+            Some(self.long.as_ref().unwrap().is_name_end())
         } else {
             None
         }
@@ -356,7 +360,7 @@ impl DirectoryItem {
 
     pub(crate) fn length(&self) -> Option<usize> {
         if self.short.is_some() {
-            Some(self.short.unwrap().length as usize)
+            Some(self.short.as_ref().unwrap().length as usize)
         } else {
             None
         }
@@ -364,9 +368,9 @@ impl DirectoryItem {
 
     pub(crate) fn bytes(&self) -> [u8; 32] {
         if self.short.is_some() {
-            self.short.unwrap().bytes(self.item_type)
+            self.short.as_ref().unwrap().bytes(self.item_type)
         } else {
-            self.long.unwrap().bytes()
+            self.long.as_ref().unwrap().bytes()
         }
     }
 
@@ -448,6 +452,10 @@ impl DirectoryItem {
         } else {
             false
         }
+    }
+
+    pub(crate) fn set_file_length(&mut self, length: usize) {
+        self.short.as_mut().unwrap().length = length as u32;
     }
 
     pub(crate) fn is_lfn(&self) -> bool {

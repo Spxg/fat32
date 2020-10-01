@@ -31,6 +31,7 @@ mod fat32 {
     };
     use crate::dir::DirError;
     use crate::BUFFER_SIZE;
+    use crate::file::WriteType;
 
     const GENERIC_READ: c_ulong = 1 << 31;
     const GENERIC_WRITE: c_ulong = 1 << 30;
@@ -150,6 +151,7 @@ mod fat32 {
         let device = Device::mount();
         let volume = Volume::new(device);
         let mut root = volume.root_dir();
+        let mut buf = [0; BUFFER_SIZE];
 
         let test_dir = root.create_dir("test_dir");
         assert!(test_dir.is_ok());
@@ -161,12 +163,22 @@ mod fat32 {
         let illegal_char = test_dir.create_file("illegal_char:");
         assert_eq!(illegal_char.err().unwrap(), DirError::IllegalChar);
 
-        let lfn_file = test_dir.create_file("Rust牛逼");
+        let lfn_file = test_dir.create_file("Rust牛逼.txt");
         assert!(lfn_file.is_ok());
 
-        let delete_dir = test_dir.delete_dir("Rust牛逼");
+        let file = test_dir.open_file("Rust牛逼.txt");
+        assert!(file.is_ok());
+
+        let mut file = file.unwrap();
+        file.write("停留牛逼，测试一把梭".as_bytes(), WriteType::OverWritten).unwrap();
+        let read_res = file.read(&mut buf);
+        assert!(read_res.is_ok());
+        let length = read_res.unwrap();
+        assert_eq!("停留牛逼，测试一把梭", str::from_utf8(&buf[0..length]).unwrap());
+
+        let delete_dir = test_dir.delete_dir("Rust牛逼.txt");
         assert_eq!(delete_dir.err().unwrap(), DirError::NoMatchDir);
-        let delete_file = test_dir.delete_file("Rust牛逼");
+        let delete_file = test_dir.delete_file("Rust牛逼.txt");
         assert!(delete_file.is_ok());
         let delete_test_dir = root.delete_dir("test_dir");
         assert!(delete_test_dir.is_ok());

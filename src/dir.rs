@@ -263,7 +263,7 @@ pub struct DirIter<T>
 impl<T> DirIter<T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
-    fn new(offset: usize, bps: usize, device: T) -> DirIter<T> {
+    pub(crate) fn new(offset: usize, bps: usize, device: T) -> DirIter<T> {
         DirIter::<T> {
             device,
             bps,
@@ -294,11 +294,11 @@ impl<T> DirIter<T>
         self.buffer[self.index] = 0xE5;
     }
 
-    fn update_item(&mut self, buf: &[u8]) {
+    pub(crate) fn update_item(&mut self, buf: &[u8]) {
         self.buffer[self.index..self.index + 32].copy_from_slice(buf)
     }
 
-    fn previous(&mut self) {
+    pub(crate) fn previous(&mut self) {
         if self.index == 0 && self.num_offset != 0 {
             self.index = BUFFER_SIZE - 32;
             self.num_offset -= 1;
@@ -308,14 +308,14 @@ impl<T> DirIter<T>
         }
     }
 
-    fn update_buffer(&mut self) {
+    pub(crate) fn update_buffer(&mut self) {
         let offset = self.offset_value();
         self.device.read(&mut self.buffer,
                          offset,
                          1).unwrap();
     }
 
-    fn update(&self) {
+    pub(crate) fn update(&self) {
         self.device.write(&self.buffer,
                           self.offset_value(),
                           1).unwrap();
