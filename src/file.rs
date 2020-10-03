@@ -57,24 +57,28 @@ impl<'a, T> File<'a, T>
     }
 
     pub fn write(&mut self, buf: &[u8], write_type: WriteType) -> Result<(), FileError> {
-        let num_cluster = self.num_cluster(buf.len());
+        let num_cluster = match write_type {
+            WriteType::OverWritten => self.num_cluster(buf.len()),
+            WriteType::Append => self.num_cluster(buf.len() + self.detail.length().unwrap())
+        };
+
         let mut write_count = self.write_count(buf.len());
         let spc = self.bpb.sector_per_cluster_usize();
         let mut buf_write = [0; BUFFER_SIZE];
 
-        self.fat.map(|mut f| f.write(f.current_cluster, 0)).last();
-
-        for n in 0..num_cluster {
-            let bl1 = self.fat.blank_cluster();
-            self.fat.write(bl1, 0x0FFFFFFF);
-            let bl2 = self.fat.blank_cluster();
-            if n != num_cluster - 1 {
-                self.fat.write(bl1, bl2);
-            }
-        }
-
         match write_type {
             WriteType::OverWritten => {
+                self.fat.map(|mut f| f.write(f.current_cluster, 0)).last();
+
+                for n in 0..num_cluster {
+                    let bl1 = self.fat.blank_cluster();
+                    self.fat.write(bl1, 0x0FFFFFFF);
+                    let bl2 = self.fat.blank_cluster();
+                    if n != num_cluster - 1 {
+                        self.fat.write(bl1, bl2);
+                    }
+                }
+
                 let mut w = 0;
                 self.fat.map(|f| {
                     let count = if write_count / spc > 0 {
@@ -84,10 +88,11 @@ impl<'a, T> File<'a, T>
                         write_count
                     };
 
-                    for c in 0..count {
+                    for sector in 0..count {
                         self.buf_write(buf, w, &mut buf_write);
+                        let offset = self.bpb.offset(f.current_cluster) + sector * BUFFER_SIZE;
                         self.device.write(&buf_write,
-                                          self.bpb.offset(f.current_cluster) + c * BUFFER_SIZE,
+                                          offset,
                                           1).unwrap();
                         w += 1;
                     }
@@ -127,6 +132,16 @@ impl<'a, T> File<'a, T>
         } else {
             to.copy_from_slice(&from[index..index_end])
         }
+    }
+
+    fn fill_sector(&self, buf: &[u8]) {
+        let mut data = [0; 512];
+        let num_sector = self.detail.length().unwrap() / BUFFER_SIZE;
+        let left = self.detail.length().unwrap() % BUFFER_SIZE;
+        let offset = self.bpb.offset(self.detail.cluster()) + num_sector * BUFFER_SIZE;
+        self.device.read(&mut data, offset, 1).unwrap();
+        data[0..left].copy_from_slice(&buf[0..left]);
+        self.device.write(&data, offset, 1).unwrap();
     }
 
     fn update_length(&mut self, length: usize) {

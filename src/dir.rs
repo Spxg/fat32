@@ -280,6 +280,10 @@ impl<T> DirIter<T>
 
     fn offset_index(&mut self) {
         self.index += 32;
+        if self.index % BUFFER_SIZE == 0 {
+            if self.index != 0 { self.num_offset += 1; }
+            self.index = 0;
+        }
     }
 
     fn is_end(&self) -> bool {
@@ -328,11 +332,7 @@ impl<T> Iterator for DirIter<T>
     type Item = DirectoryItem;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index % BUFFER_SIZE == 0 {
-            self.update_buffer();
-            if self.index != 0 { self.num_offset += 1; }
-            self.index = 0;
-        }
+        if self.index == 0 { self.update_buffer(); }
 
         if self.is_end() { return None; };
 
