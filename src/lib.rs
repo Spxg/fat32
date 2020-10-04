@@ -178,7 +178,7 @@ mod fat32 {
         file.write(&[48; 10240], WriteType::Append).unwrap();
         let length = file.read(&mut buf);
         assert!(length.is_ok());
-        assert_eq!([48; 10240], buf["停留牛逼，测试一把梭".len()..length.unwrap()g]);
+        assert_eq!([48; 10240], buf["停留牛逼，测试一把梭".len()..length.unwrap()]);
 
         file.write(&[48; 10241], WriteType::OverWritten).unwrap();
         let length = file.read(&mut buf);
