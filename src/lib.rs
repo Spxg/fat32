@@ -151,7 +151,7 @@ mod fat32 {
         let device = Device::mount();
         let volume = Volume::new(device);
         let mut root = volume.root_dir();
-        let mut buf = [0; BUFFER_SIZE];
+        let mut buf = [0; 20480];
 
         let test_dir = root.create_dir("test_dir");
         assert!(test_dir.is_ok());
@@ -171,10 +171,19 @@ mod fat32 {
 
         let mut file = file.unwrap();
         file.write("停留牛逼，测试一把梭".as_bytes(), WriteType::OverWritten).unwrap();
-        let read_res = file.read(&mut buf);
-        assert!(read_res.is_ok());
-        let length = read_res.unwrap();
-        assert_eq!("停留牛逼，测试一把梭", str::from_utf8(&buf[0..length]).unwrap());
+        let length = file.read(&mut buf);
+        assert!(length.is_ok());
+        assert_eq!("停留牛逼，测试一把梭", str::from_utf8(&buf[0..length.unwrap()]).unwrap());
+
+        file.write(&[48; 10240], WriteType::Append).unwrap();
+        let length = file.read(&mut buf);
+        assert!(length.is_ok());
+        assert_eq!([48; 10240], buf["停留牛逼，测试一把梭".len()..length.unwrap()g]);
+
+        file.write(&[48; 10241], WriteType::OverWritten).unwrap();
+        let length = file.read(&mut buf);
+        assert!(length.is_ok());
+        assert_eq!([48; 10241], buf[0..length.unwrap()]);
 
         let delete_dir = test_dir.delete_dir("Rust牛逼.txt");
         assert_eq!(delete_dir.err().unwrap(), DirError::NoMatchDir);

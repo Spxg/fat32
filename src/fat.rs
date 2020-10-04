@@ -64,6 +64,11 @@ impl<T> FAT<T>
                           1).unwrap();
     }
 
+    pub(crate) fn refresh(&mut self, start_cluster: u32) {
+        self.current_cluster = 0;
+        self.start_cluster = start_cluster;
+    }
+
     fn current_cluster_usize(&self) -> usize {
         self.current_cluster as usize
     }
@@ -91,7 +96,7 @@ impl<T> Iterator for FAT<T>
         let offset_left = offset % BUFFER_SIZE;
 
         self.device.read(&mut self.buffer,
-                         self.fat_offset + block_offset,
+                         self.fat_offset + block_offset * BUFFER_SIZE,
                          1).unwrap();
 
         let next_cluster = read_le_u32(&self.buffer[offset_left..offset_left + 4]);
@@ -100,6 +105,8 @@ impl<T> Iterator for FAT<T>
         } else {
             Some(next_cluster)
         };
+
+        self.next_cluster = next_cluster;
 
         Some(Self {
             next_cluster,
