@@ -12,7 +12,10 @@ license = "MIT"
 
 [dependencies]
 getrandom = "0.2"
-winapi = { version = "0.3", features = ["fileapi", "winioctl", "ioapiset"] }
+
+[target.'cfg(windows)'.dev-dependencies.winapi]
+version = "0.3"
+features = ["fileapi", "winioctl", "ioapiset"]
 
 [dependencies.block_device]
 version = "0.1"

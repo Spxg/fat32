@@ -10,10 +10,10 @@ pub mod fat;
 
 #[macro_use]
 extern crate std;
-
 const BUFFER_SIZE: usize = 512;
 
 #[cfg(test)]
+#[cfg(windows)]
 mod fat32 {
     extern crate winapi;
 
