@@ -3,7 +3,6 @@ use crate::bpb::BIOSParameterBlock;
 use crate::directory_item::DirectoryItem;
 use crate::BUFFER_SIZE;
 use crate::tool::{
-    NameType,
     is_illegal,
     sfn_or_lfn,
     get_count_of_lfn,
@@ -11,6 +10,7 @@ use crate::tool::{
     random_str_bytes,
     generate_checksum,
 };
+use crate::directory_item::NameType;
 use crate::file::File;
 use crate::fat::FAT;
 
@@ -98,8 +98,7 @@ impl<'a, T> Dir<'a, T>
 
     pub fn exist(&self, value: &str) -> Option<DirectoryItem> {
         let offset = self.bpb.offset(self.detail.cluster());
-        let bps = self.bpb.byte_per_sector_usize();
-        let mut iter = DirIter::new(offset, bps, self.device);
+        let mut iter = DirIter::new(offset, self.device);
 
         match sfn_or_lfn(value) {
             NameType::SFN => iter.find(|d| d.sfn_equal(value)),
@@ -119,7 +118,7 @@ impl<'a, T> Dir<'a, T>
         let mut index = get_lfn_index(value, count);
         let mut has_match = true;
 
-        let res = iter.find(|d| {
+        let result = iter.find(|d| {
             if d.is_lfn()
                 && d.count_of_name().unwrap() == count
                 && d.is_name_end().unwrap()
@@ -128,7 +127,7 @@ impl<'a, T> Dir<'a, T>
             } else { false }
         });
 
-        if let Some(_) = res {
+        if let Some(_) = result {
             for c in (1..count).rev() {
                 let value = &value[0..index];
                 index = get_lfn_index(value, c);
@@ -201,8 +200,7 @@ impl<'a, T> Dir<'a, T>
     fn delete(&mut self, value: &str, delete_type: OpType) -> Result<(), DirError> {
         if is_illegal(value) { return Err(DirError::IllegalChar); }
         let offset = self.bpb.offset(self.detail.cluster());
-        let bps = self.bpb.byte_per_sector_usize();
-        let mut iter = DirIter::new(offset, bps, self.device);
+        let mut iter = DirIter::new(offset, self.device);
 
         match self.exist_iter(&mut iter, value) {
             None => return match delete_type {
@@ -213,7 +211,8 @@ impl<'a, T> Dir<'a, T>
                 match delete_type {
                     OpType::Dir if di.is_file() => return Err(DirError::NoMatchDir),
                     OpType::File if di.is_dir() => return Err(DirError::NoMatchFile),
-                    _ => {}
+                    OpType::Dir => self.delete_in_dir(di.cluster()),
+                    OpType::File => ()
                 }
                 self.fat.write(di.cluster(), 0);
             }
@@ -237,11 +236,25 @@ impl<'a, T> Dir<'a, T>
         Ok(())
     }
 
+    fn delete_in_dir(&self, cluster: u32) {
+        let offset = self.bpb.offset(cluster);
+        let mut iter = DirIter::new(offset, self.device);
+        loop {
+            if let Some(d) = iter.next() {
+                if d.is_dir() { self.delete_in_dir(d.cluster()); }
+                if d.is_deleted() { continue; }
+                iter.previous();
+                iter.set_deleted();
+                iter.update();
+            } else {
+                break;
+            }
+        }
+    }
+
     fn write_directory_item(&self, di: DirectoryItem) {
         let offset = self.bpb.offset(self.detail.cluster());
-        let bps = self.bpb.byte_per_sector_usize();
-
-        let mut iter = DirIter::new(offset, bps, self.device);
+        let mut iter = DirIter::new(offset, self.device);
         iter.find(|_| false);
         iter.update_item(&di.bytes());
         iter.update();
@@ -253,7 +266,6 @@ pub struct DirIter<T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
     device: T,
-    bps: usize,
     offset: usize,
     num_offset: usize,
     index: usize,
@@ -263,10 +275,9 @@ pub struct DirIter<T>
 impl<T> DirIter<T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
-    pub(crate) fn new(offset: usize, bps: usize, device: T) -> DirIter<T> {
+    pub(crate) fn new(offset: usize, device: T) -> DirIter<T> {
         DirIter::<T> {
             device,
-            bps,
             offset,
             num_offset: 0,
             index: 0,
@@ -275,7 +286,7 @@ impl<T> DirIter<T>
     }
 
     fn offset_value(&self) -> usize {
-        self.offset + self.num_offset * self.bps
+        self.offset + self.num_offset * BUFFER_SIZE
     }
 
     fn offset_index(&mut self) {
@@ -288,6 +299,10 @@ impl<T> DirIter<T>
 
     fn is_end(&self) -> bool {
         self.buffer[self.index] == 0x00
+    }
+
+    fn is_special_item(&self) -> bool {
+        self.buffer[self.index] == 0x2E
     }
 
     fn get_part_buf(&mut self) -> &[u8] {
@@ -336,10 +351,14 @@ impl<T> Iterator for DirIter<T>
 
         if self.is_end() { return None; };
 
-        let buf = self.get_part_buf();
-        let di = DirectoryItem::from_buf(buf);
-        self.offset_index();
-
-        Some(di)
+        if self.is_special_item() {
+            self.offset_index();
+            self.next()
+        } else {
+            let buf = self.get_part_buf();
+            let di = DirectoryItem::from_buf(buf);
+            self.offset_index();
+            Some(di)
+        }
     }
 }

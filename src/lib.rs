@@ -185,10 +185,6 @@ mod fat32 {
         assert!(length.is_ok());
         assert_eq!([48; 10241], buf[0..length.unwrap()]);
 
-        let delete_dir = test_dir.delete_dir("Rust牛逼.txt");
-        assert_eq!(delete_dir.err().unwrap(), DirError::NoMatchDir);
-        let delete_file = test_dir.delete_file("Rust牛逼.txt");
-        assert!(delete_file.is_ok());
         let delete_test_dir = root.delete_dir("test_dir");
         assert!(delete_test_dir.is_ok());
     }

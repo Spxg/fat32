@@ -160,8 +160,7 @@ impl<'a, T> File<'a, T>
 
     fn update_length(&mut self, length: usize) {
         let offset = self.bpb.offset(self.dir_cluster);
-        let bps = self.bpb.byte_per_sector_usize();
-        let mut iter = DirIter::new(offset, bps, self.device);
+        let mut iter = DirIter::new(offset, self.device);
         iter.find(|d| {
             !d.is_deleted() && !d.is_lfn() && d.cluster() == self.detail.cluster()
         }).unwrap();

@@ -1,11 +1,7 @@
 use core::convert::TryInto;
 use core::str;
 use crate::BUFFER_SIZE;
-
-pub(crate) enum NameType {
-    SFN,
-    LFN,
-}
+use crate::directory_item::NameType;
 
 pub(crate) fn is_fat32(value: &[u8]) -> bool {
     let file_system_str = str::from_utf8(&value[0..5]).unwrap();
@@ -81,7 +77,15 @@ pub(crate) fn generate_checksum(value: &[u8]) -> u8 {
 
 pub(crate) fn random_str_bytes() -> Result<[u8; 11], getrandom::Error> {
     let mut bytes = [0u8; 11];
-    getrandom::getrandom(&mut bytes)?;
+    loop {
+        getrandom::getrandom(&mut bytes)?;
+        if bytes[0x00] == 0xE5 {
+            continue
+        } else {
+            break
+        }
+    }
+
     Ok(bytes)
 }
 

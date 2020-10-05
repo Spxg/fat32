@@ -26,9 +26,6 @@ impl BIOSParameterBlock {
         (self.reserved_sector as usize) * (self.byte_per_sector as usize)
     }
 
-    pub(crate) fn byte_per_sector_usize(&self) -> usize {
-        self.byte_per_sector as usize
-    }
     pub(crate) fn sector_per_cluster_usize(&self) -> usize {
         self.sector_per_cluster as usize
     }
