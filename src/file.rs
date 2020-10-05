@@ -5,6 +5,7 @@ use crate::directory_item::DirectoryItem;
 use crate::fat::FAT;
 use crate::BUFFER_SIZE;
 use crate::dir::DirIter;
+use crate::tool::get_needed_sector;
 
 #[derive(Debug)]
 pub enum FileError {
@@ -44,11 +45,7 @@ impl<'a, T> File<'a, T>
             let offset = self.bpb.offset(f.current_cluster);
             let end = if (length - index) < cluster_size {
                 let bytes_left = length % cluster_size;
-                number_of_blocks = if bytes_left % BUFFER_SIZE == 0 {
-                    bytes_left / BUFFER_SIZE
-                } else {
-                    bytes_left / BUFFER_SIZE + 1
-                };
+                number_of_blocks = get_needed_sector(bytes_left);
                 index + bytes_left
             } else {
                 index + cluster_size
@@ -111,14 +108,6 @@ impl<'a, T> File<'a, T>
         }
     }
 
-    fn num_write_count(&self, length: usize) -> usize {
-        if length % BUFFER_SIZE != 0 {
-            length / BUFFER_SIZE + 1
-        } else {
-            length / BUFFER_SIZE
-        }
-    }
-
     fn buf_write(&self, from: &[u8], value: usize, to: &mut [u8]) {
         let index = value * BUFFER_SIZE;
         let index_end = index + BUFFER_SIZE;
@@ -151,11 +140,7 @@ impl<'a, T> File<'a, T>
         self.device.write(&data, offset, 1).unwrap();
 
         if buf_has_left {
-            let buf_needed_sector = if (buf.len() - end) % BUFFER_SIZE == 0 {
-                (buf.len() - end) / BUFFER_SIZE
-            } else {
-                (buf.len() - end) / BUFFER_SIZE + 1
-            };
+            let buf_needed_sector = get_needed_sector(buf.len() - end);
             let the_cluster_left_sector = spc - (num_sector + 1);
             let num_sector = cmp::min(the_cluster_left_sector,
                                       buf_needed_sector);
@@ -201,7 +186,7 @@ impl<'a, T> File<'a, T>
     fn _write(&self, buf: &[u8], fat: &FAT<T>) {
         let spc = self.bpb.sector_per_cluster_usize();
         let mut buf_write = [0; BUFFER_SIZE];
-        let mut write_count = self.num_write_count(buf.len());
+        let mut write_count = get_needed_sector(buf.len());
 
         let mut w = 0;
         fat.map(|f| {

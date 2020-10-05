@@ -1,5 +1,6 @@
 use core::convert::TryInto;
 use core::str;
+use crate::BUFFER_SIZE;
 
 pub(crate) enum NameType {
     SFN,
@@ -82,4 +83,12 @@ pub(crate) fn random_str_bytes() -> Result<[u8; 11], getrandom::Error> {
     let mut bytes = [0u8; 11];
     getrandom::getrandom(&mut bytes)?;
     Ok(bytes)
+}
+
+pub(crate) fn get_needed_sector(value: usize) -> usize {
+    if value % BUFFER_SIZE != 0 {
+        value / BUFFER_SIZE + 1
+    } else {
+        value / BUFFER_SIZE
+    }
 }
