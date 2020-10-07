@@ -151,41 +151,56 @@ mod fat32 {
         let device = Device::mount();
         let volume = Volume::new(device);
         let mut root = volume.root_dir();
-        let mut buf = [0; 20480];
+        let mut buf = [0; 204800];
 
+        // all test run in this dir
         let test_dir = root.create_dir("test_dir");
         assert!(test_dir.is_ok());
 
+        // cd test_dir
         let test_dir = root.cd("test_dir");
         assert!(test_dir.is_ok());
         let mut test_dir = test_dir.unwrap();
 
+        // test to create a file which contains illegal char
         let illegal_char = test_dir.create_file("illegal_char:");
         assert_eq!(illegal_char.err().unwrap(), DirError::IllegalChar);
 
+        // test to create a long file name file
         let lfn_file = test_dir.create_file("Rust牛逼.txt");
         assert!(lfn_file.is_ok());
 
+        // open a long file name file
         let file = test_dir.open_file("Rust牛逼.txt");
         assert!(file.is_ok());
-
         let mut file = file.unwrap();
-        file.write("停留牛逼，测试一把梭".as_bytes(), WriteType::OverWritten).unwrap();
+
+        // test to write bytes whose length less than sector size, OverWritten
+        file.write("测试一把梭".as_bytes(), WriteType::OverWritten).unwrap();
+
+        // read the result, get the length and assert
         let length = file.read(&mut buf);
         assert!(length.is_ok());
-        assert_eq!("停留牛逼，测试一把梭", str::from_utf8(&buf[0..length.unwrap()]).unwrap());
+        assert_eq!("测试一把梭", str::from_utf8(&buf[0..length.unwrap()]).unwrap());
 
-        file.write(&[48; 10240], WriteType::Append).unwrap();
+        // test to write bytes whose length larger than cluster bytes, Append
+        file.write(&[b'0'; 102400], WriteType::Append).unwrap();
+
+        // read the result, get the length and assert
         let length = file.read(&mut buf);
         assert!(length.is_ok());
-        assert_eq!("停留牛逼，测试一把梭", str::from_utf8(&buf[0.."停留牛逼，测试一把梭".len()]).unwrap());
-        assert_eq!([48; 10240], buf["停留牛逼，测试一把梭".len()..length.unwrap()]);
+        assert_eq!("测试一把梭", str::from_utf8(&buf[0.."测试一把梭".len()]).unwrap());
+        assert_eq!([b'0'; 102400], buf["测试一把梭".len()..length.unwrap()]);
 
-        file.write(&[48; 10241], WriteType::OverWritten).unwrap();
+        // test to write bytes whose length larger than cluster bytes, OverWritten
+        file.write(&[b'0'; 102410], WriteType::OverWritten).unwrap();
+
+        // read the result, get the length and assert
         let length = file.read(&mut buf);
         assert!(length.is_ok());
-        assert_eq!([48; 10241], buf[0..length.unwrap()]);
+        assert_eq!([b'0'; 102410], buf[0..length.unwrap()]);
 
+        // test to delete
         let delete_test_dir = root.delete_dir("test_dir");
         assert!(delete_test_dir.is_ok());
     }
