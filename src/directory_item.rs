@@ -44,12 +44,6 @@ impl Default for ItemType {
 pub struct ShortDirectoryItem {
     name: [u8; 8],
     extension: [u8; 3],
-    create_ms: u8,
-    create_time: [u8; 2],
-    create_date: [u8; 2],
-    last_visit_date: [u8; 2],
-    edit_time: [u8; 2],
-    edit_date: [u8; 2],
     length: u32,
     cluster: u32,
 }
@@ -111,11 +105,6 @@ impl ShortDirectoryItem {
     fn from_buf(buf: &[u8]) -> Self {
         let mut name = [0; 8];
         let mut extension = [0; 3];
-        let create_time = [buf[0x0F], buf[0x0E]];
-        let create_date = [buf[0x11], buf[0x10]];
-        let last_visit_date = [buf[0x13], buf[0x12]];
-        let edit_time = [buf[0x17], buf[0x16]];
-        let edit_date = [buf[0x19], buf[0x18]];
 
         name.copy_from_slice(&buf[0x00..0x08]);
         extension.copy_from_slice(&buf[0x08..0x0B]);
@@ -123,12 +112,6 @@ impl ShortDirectoryItem {
         Self {
             name,
             extension,
-            create_ms: buf[0x0D],
-            create_time,
-            create_date,
-            last_visit_date,
-            edit_time,
-            edit_date,
             cluster: ((buf[0x15] as u32) << 24)
                 | ((buf[0x14] as u32) << 16)
                 | ((buf[0x1B] as u32) << 8)
@@ -322,90 +305,90 @@ impl LongDirectoryItem {
 #[derive(Default, Copy, Clone, Debug)]
 pub struct DirectoryItem {
     pub(crate) item_type: ItemType,
-    short: Option<ShortDirectoryItem>,
-    long: Option<LongDirectoryItem>,
+    sfn: Option<ShortDirectoryItem>,
+    lfn: Option<LongDirectoryItem>,
 }
 
 impl DirectoryItem {
     pub(crate) fn cluster(&self) -> u32 {
-        self.short.unwrap().cluster
+        self.sfn.unwrap().cluster
     }
 
     fn get_sfn(&self) -> Option<([u8; 12], usize)> {
-        if self.short.is_some() {
-            Some(self.short.as_ref().unwrap().get_full_name_bytes())
+        if self.sfn.is_some() {
+            Some(self.sfn.as_ref().unwrap().get_full_name_bytes())
         } else {
             None
         }
     }
 
     fn get_lfn(&self) -> Option<([u8; 13 * 3], usize)> {
-        if self.long.is_some() {
-            Some(self.long.as_ref().unwrap().to_utf8())
+        if self.lfn.is_some() {
+            Some(self.lfn.as_ref().unwrap().to_utf8())
         } else {
             None
         }
     }
 
     pub(crate) fn count_of_name(&self) -> Option<usize> {
-        if self.long.is_some() {
-            Some(self.long.as_ref().unwrap().count_of_name())
+        if self.lfn.is_some() {
+            Some(self.lfn.as_ref().unwrap().count_of_name())
         } else {
             None
         }
     }
 
     pub(crate) fn is_name_end(&self) -> Option<bool> {
-        if self.long.is_some() {
-            Some(self.long.as_ref().unwrap().is_name_end())
+        if self.lfn.is_some() {
+            Some(self.lfn.as_ref().unwrap().is_name_end())
         } else {
             None
         }
     }
 
     pub(crate) fn length(&self) -> Option<usize> {
-        if self.short.is_some() {
-            Some(self.short.as_ref().unwrap().length as usize)
+        if self.sfn.is_some() {
+            Some(self.sfn.as_ref().unwrap().length as usize)
         } else {
             None
         }
     }
 
     pub(crate) fn bytes(&self) -> [u8; 32] {
-        if self.short.is_some() {
-            self.short.as_ref().unwrap().bytes(self.item_type)
+        if self.sfn.is_some() {
+            self.sfn.as_ref().unwrap().bytes(self.item_type)
         } else {
-            self.long.as_ref().unwrap().bytes()
+            self.lfn.as_ref().unwrap().bytes()
         }
     }
 
     pub(crate) fn new_lfn(attribute: u8, check_sum: u8, value: &str) -> Self {
         Self {
             item_type: ItemType::LFN,
-            short: None,
-            long: Some(LongDirectoryItem::new(attribute, check_sum, value)),
+            sfn: None,
+            lfn: Some(LongDirectoryItem::new(attribute, check_sum, value)),
         }
     }
 
     pub(crate) fn new_sfn(cluster: u32, value: &str, create_type: OpType) -> Self {
         Self {
             item_type: ItemType::from_create(create_type),
-            short: Some(ShortDirectoryItem::new(cluster, value, create_type)),
-            long: None,
+            sfn: Some(ShortDirectoryItem::new(cluster, value, create_type)),
+            lfn: None,
         }
     }
 
     pub(crate) fn new_sfn_bytes(cluster: u32, value: &[u8], create_type: OpType) -> Self {
         Self {
             item_type: ItemType::from_create(create_type),
-            short: Some(ShortDirectoryItem::new_bytes(cluster, value, create_type)),
-            long: None,
+            sfn: Some(ShortDirectoryItem::new_bytes(cluster, value, create_type)),
+            lfn: None,
         }
     }
 
     pub(crate) fn root_dir(cluster: u32) -> Self {
         Self {
-            short: Some(ShortDirectoryItem::root_dir(cluster)),
+            sfn: Some(ShortDirectoryItem::root_dir(cluster)),
             ..Self::default()
         }
     }
@@ -421,15 +404,15 @@ impl DirectoryItem {
             ItemType::LFN => {
                 Self {
                     item_type,
-                    short: None,
-                    long: Some(LongDirectoryItem::from_buf(buf)),
+                    sfn: None,
+                    lfn: Some(LongDirectoryItem::from_buf(buf)),
                 }
             }
             _ => {
                 Self {
                     item_type,
-                    short: Some(ShortDirectoryItem::from_buf(buf)),
-                    long: None,
+                    sfn: Some(ShortDirectoryItem::from_buf(buf)),
+                    lfn: None,
                 }
             }
         }
@@ -460,7 +443,7 @@ impl DirectoryItem {
     }
 
     pub(crate) fn set_file_length(&mut self, length: usize) {
-        self.short.as_mut().unwrap().length = length as u32;
+        self.sfn.as_mut().unwrap().length = length as u32;
     }
 
     pub(crate) fn is_lfn(&self) -> bool {
