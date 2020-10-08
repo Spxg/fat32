@@ -8,8 +8,6 @@ pub mod directory_item;
 pub mod file;
 pub mod fat;
 
-#[macro_use]
-extern crate std;
 const BUFFER_SIZE: usize = 512;
 
 #[cfg(test)]
@@ -157,6 +155,17 @@ mod fat32 {
         let test_dir = root.create_dir("test_dir");
         assert!(test_dir.is_ok());
 
+        //
+        // let f = root.create_file("firmware.backup");
+        // assert!(f.is_ok());
+        //
+        // let o = root.open_file("firmware.bin").unwrap();
+        // let mut b = root.open_file("firmware.backup").unwrap();
+        //
+        // for (buf, len) in o.read_per_sector() {
+        //     b.write(&buf[0..len], WriteType::Append).unwrap();
+        // }
+
         // cd test_dir
         let test_dir = root.cd("test_dir");
         assert!(test_dir.is_ok());
@@ -182,6 +191,11 @@ mod fat32 {
         let length = file.read(&mut buf);
         assert!(length.is_ok());
         assert_eq!("测试一把梭", str::from_utf8(&buf[0..length.unwrap()]).unwrap());
+
+        // read per sector
+        for (buffer, len) in file.read_per_sector() {
+            assert_eq!("测试一把梭", str::from_utf8(&buffer[0..len]).unwrap());
+        }
 
         // test to write bytes whose length larger than cluster bytes, Append
         file.write(&[b'0'; 102400], WriteType::Append).unwrap();

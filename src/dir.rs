@@ -7,7 +7,6 @@ use crate::tool::{
     sfn_or_lfn,
     get_count_of_lfn,
     get_lfn_index,
-    random_str_bytes,
     generate_checksum,
 };
 use crate::directory_item::NameType;
@@ -164,9 +163,8 @@ impl<'a, T> Dir<'a, T>
                 self.write_directory_item(di);
             }
             NameType::LFN => {
-                let sfn = random_str_bytes().unwrap();
-                let check_sum = generate_checksum(&sfn);
-
+                let sfn = "unsupported".as_bytes();
+                let check_sum = generate_checksum(sfn);
                 let count = get_count_of_lfn(value);
                 let mut lfn_index = get_lfn_index(value, count);
 
@@ -186,14 +184,14 @@ impl<'a, T> Dir<'a, T>
                 }
 
                 let di = DirectoryItem::new_sfn_bytes(blank_cluster,
-                                                      &sfn,
+                                                      sfn,
                                                       create_type);
                 self.write_directory_item(di);
             }
         }
 
         self.fat.write(blank_cluster, 0x0FFFFFFF);
-
+        if let OpType::Dir = create_type { self.clean_all_cluster_data(blank_cluster); }
         Ok(())
     }
 
@@ -258,6 +256,16 @@ impl<'a, T> Dir<'a, T>
         iter.find(|_| false);
         iter.update_item(&di.bytes());
         iter.update();
+    }
+
+    fn clean_all_cluster_data(&self, cluster: u32) {
+        let spc = self.bpb.sector_per_cluster_usize();
+        for i in 0..spc {
+            let offset = self.bpb.offset(cluster) + i * BUFFER_SIZE;
+            self.device.write(&[0; BUFFER_SIZE],
+                              offset,
+                              1).unwrap();
+        }
     }
 }
 

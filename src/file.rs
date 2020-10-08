@@ -29,6 +29,18 @@ pub struct File<'a, T>
     pub(crate) fat: FAT<T>,
 }
 
+pub struct ReadIter<'a, T>
+    where T: BlockDevice + Clone + Copy,
+          <T as BlockDevice>::Error: core::fmt::Debug {
+    device: T,
+    buffer: [u8; BUFFER_SIZE],
+    bpb: &'a BIOSParameterBlock,
+    fat: FAT<T>,
+    left_length: usize,
+    read_count: usize,
+    need_count: usize,
+}
+
 impl<'a, T> File<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
@@ -98,6 +110,19 @@ impl<'a, T> File<'a, T>
         Ok(())
     }
 
+    pub fn read_per_sector(&self) -> ReadIter<T> {
+        let left_length = self.detail.length().unwrap();
+        ReadIter::<T> {
+            device: self.device,
+            buffer: [0; BUFFER_SIZE],
+            bpb: self.bpb,
+            fat: self.fat,
+            left_length,
+            read_count: 0,
+            need_count: get_needed_sector(left_length),
+        }
+    }
+
     fn num_cluster(&self, length: usize) -> usize {
         let spc = self.bpb.sector_per_cluster_usize();
         let cluster_size = spc * BUFFER_SIZE;
@@ -120,39 +145,54 @@ impl<'a, T> File<'a, T>
     }
 
     fn fill_left_sector(&self, buf: &[u8], cluster: u32) -> (bool, usize) {
-        let mut data = [0; 512];
         let spc = self.bpb.sector_per_cluster_usize();
-        let num_sector = self.detail.length().unwrap() / BUFFER_SIZE % spc;
-        let left = self.detail.length().unwrap() % BUFFER_SIZE;
-        let offset = self.bpb.offset(cluster) + num_sector * BUFFER_SIZE;
-        let end = BUFFER_SIZE - left;
-        let mut index = end;
-        self.device.read(&mut data, offset, 1).unwrap();
-
-        let buf_has_left = if buf.len() <= left {
-            data[left..left + buf.len()]
-                .copy_from_slice(&buf[0..buf.len()]);
-            false
+        let length = self.detail.length().unwrap();
+        let get_used_sector = |len: usize| if len % (spc * BUFFER_SIZE) == 0 && length != 0 {
+            spc
         } else {
-            data[left..].copy_from_slice(&buf[0..end]);
-            true
+            len % (spc * BUFFER_SIZE) / BUFFER_SIZE
         };
-        self.device.write(&data, offset, 1).unwrap();
+        let left_start = length % BUFFER_SIZE;
+        let blank_size = BUFFER_SIZE - left_start;
+
+        let mut already_fill = 0;
+        let mut buf_has_left = true;
+        let mut index = 0;
+        let mut used_sector = get_used_sector(length);
+        let mut data = [0; BUFFER_SIZE];
+        let mut offset = self.bpb.offset(cluster) + used_sector * BUFFER_SIZE;
+
+        if left_start != 0 {
+            self.device.read(&mut data, offset, 1).unwrap();
+            if buf.len() <= blank_size {
+                data[left_start..left_start + buf.len()]
+                    .copy_from_slice(&buf[0..]);
+                buf_has_left = false;
+            } else {
+                data[left_start..].copy_from_slice(&buf[0..blank_size]);
+                already_fill = blank_size;
+                index = already_fill;
+                used_sector = get_used_sector(length + already_fill);
+                buf_has_left = true;
+            };
+            self.device.write(&data, offset, 1).unwrap();
+            offset = self.bpb.offset(cluster) + BUFFER_SIZE;
+        }
 
         if buf_has_left {
-            let buf_needed_sector = get_needed_sector(buf.len() - end);
-            let the_cluster_left_sector = spc - (num_sector + 1);
+            let buf_needed_sector = get_needed_sector(buf.len() - already_fill);
+            let the_cluster_left_sector = spc - used_sector;
             let num_sector = cmp::min(the_cluster_left_sector,
                                       buf_needed_sector);
             for s in 0..num_sector {
-                self.buf_write(&buf[end..], s, &mut data);
+                self.buf_write(&buf[index..], s, &mut data);
                 self.device.write(&data,
-                                  offset + (s + 1) * BUFFER_SIZE,
+                                  offset + s * BUFFER_SIZE,
                                   1).unwrap();
                 index += BUFFER_SIZE;
             }
 
-            if buf_needed_sector > the_cluster_left_sector { return (true, index) }
+            if buf_needed_sector > the_cluster_left_sector { return (true, index); }
         }
 
         (false, 0)
@@ -205,5 +245,31 @@ impl<'a, T> File<'a, T>
                 w += 1;
             }
         }).last();
+    }
+}
+
+impl<'a, T> Iterator for ReadIter<'a, T>
+    where T: BlockDevice + Clone + Copy,
+          <T as BlockDevice>::Error: core::fmt::Debug {
+    type Item = ([u8; BUFFER_SIZE], usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let spc = self.bpb.sector_per_cluster_usize();
+        if self.read_count == self.need_count { return None; }
+        if self.read_count % spc == 0 { self.fat.next(); }
+
+        let offset = self.bpb.offset(self.fat.current_cluster)
+            + (self.read_count % spc) * BUFFER_SIZE;
+        self.device.read(&mut self.buffer,
+                         offset,
+                         1).unwrap();
+        self.read_count += 1;
+
+        Some(if self.read_count == self.need_count {
+            (self.buffer, self.left_length)
+        } else {
+            self.left_length -= BUFFER_SIZE;
+            (self.buffer, BUFFER_SIZE)
+        })
     }
 }

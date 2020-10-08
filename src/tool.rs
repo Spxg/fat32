@@ -75,20 +75,6 @@ pub(crate) fn generate_checksum(value: &[u8]) -> u8 {
     checksum as u8
 }
 
-pub(crate) fn random_str_bytes() -> Result<[u8; 11], getrandom::Error> {
-    let mut bytes = [0u8; 11];
-    loop {
-        getrandom::getrandom(&mut bytes)?;
-        if bytes[0x00] == 0xE5 {
-            continue
-        } else {
-            break
-        }
-    }
-
-    Ok(bytes)
-}
-
 pub(crate) fn get_needed_sector(value: usize) -> usize {
     if value % BUFFER_SIZE != 0 {
         value / BUFFER_SIZE + 1

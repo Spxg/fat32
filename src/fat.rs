@@ -37,7 +37,7 @@ impl<T> FAT<T>
                              self.fat_offset + block * BUFFER_SIZE,
                              1).unwrap();
             for i in (0..BUFFER_SIZE).step_by(4) {
-                if self.buffer[i] == 0x0 {
+                if read_le_u32(&self.buffer[i..i + 4]) == 0 {
                     done = true;
                     break;
                 } else { cluster += 1; }
