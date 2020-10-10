@@ -155,10 +155,9 @@ mod fat32 {
         let test_dir = root.create_dir("test_dir");
         assert!(test_dir.is_ok());
 
-        //
         // let f = root.create_file("firmware.backup");
         // assert!(f.is_ok());
-        //
+
         // let o = root.open_file("firmware.bin").unwrap();
         // let mut b = root.open_file("firmware.backup").unwrap();
         //
@@ -170,6 +169,25 @@ mod fat32 {
         let test_dir = root.cd("test_dir");
         assert!(test_dir.is_ok());
         let mut test_dir = test_dir.unwrap();
+
+        // test create over cluster, test when sector_per_cluster == 1
+        test_dir.create_dir("跨簇测试1").unwrap();
+        test_dir.create_dir("跨簇测试2").unwrap();
+        test_dir.create_dir("跨簇测试3").unwrap();
+        test_dir.create_dir("跨簇测试4").unwrap();
+        test_dir.create_dir("跨簇测试5").unwrap();
+        test_dir.create_dir("跨簇测试6").unwrap();
+        test_dir.create_dir("跨簇测试7").unwrap();
+        test_dir.create_dir("跨簇测试8").unwrap();
+        test_dir.create_dir("跨簇测试9").unwrap();
+        test_dir.create_dir("跨簇测试10").unwrap();
+        test_dir.create_dir("跨簇测试11").unwrap();
+        test_dir.create_dir("跨簇测试12").unwrap();
+        test_dir.create_dir("跨簇测试13").unwrap();
+        test_dir.create_dir("跨簇测试14").unwrap();
+        test_dir.create_dir("跨簇测试15").unwrap();
+        test_dir.create_dir("跨簇测试16").unwrap();
+        test_dir.create_dir("跨簇测试17").unwrap();
 
         // test to create a file which contains illegal char
         let illegal_char = test_dir.create_file("illegal_char:");

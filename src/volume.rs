@@ -76,7 +76,7 @@ impl<T> Volume<T>
             detail: DirectoryItem::root_dir(self.bpb.root_cluster),
             fat: FAT::new(self.bpb.root_cluster,
                           self.device,
-                          self.bpb.fat1())
+                          self.bpb.fat1()),
         }
     }
 }

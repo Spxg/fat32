@@ -83,11 +83,14 @@ impl<'a, T> Dir<'a, T>
         match self.exist(dir) {
             None => Err(DirError::NoMatchDir),
             Some(di) => if di.is_dir() {
+                let fat = FAT::new(di.cluster(),
+                                   self.device,
+                                   self.bpb.fat1());
                 Ok(Self {
                     device: self.device,
                     bpb: self.bpb,
                     detail: di,
-                    fat: self.fat,
+                    fat,
                 })
             } else {
                 Err(DirError::NoMatchDir)
@@ -96,8 +99,7 @@ impl<'a, T> Dir<'a, T>
     }
 
     pub fn exist(&self, value: &str) -> Option<DirectoryItem> {
-        let offset = self.bpb.offset(self.detail.cluster());
-        let mut iter = DirIter::new(offset, self.device);
+        let mut iter = DirIter::new(self.device, self.fat, self.bpb);
 
         match sfn_or_lfn(value) {
             NameType::SFN => iter.find(|d| d.sfn_equal(value)),
@@ -154,6 +156,7 @@ impl<'a, T> Dir<'a, T>
         }
 
         let blank_cluster = self.fat.blank_cluster();
+        self.fat.write(blank_cluster, 0x0FFFFFFF);
 
         match sfn_or_lfn(value) {
             NameType::SFN => {
@@ -190,15 +193,13 @@ impl<'a, T> Dir<'a, T>
             }
         }
 
-        self.fat.write(blank_cluster, 0x0FFFFFFF);
-        if let OpType::Dir = create_type { self.clean_all_cluster_data(blank_cluster); }
+        if let OpType::Dir = create_type { self.clean_cluster_data(blank_cluster); }
         Ok(())
     }
 
     fn delete(&mut self, value: &str, delete_type: OpType) -> Result<(), DirError> {
         if is_illegal(value) { return Err(DirError::IllegalChar); }
-        let offset = self.bpb.offset(self.detail.cluster());
-        let mut iter = DirIter::new(offset, self.device);
+        let mut iter = DirIter::new(self.device, self.fat, self.bpb);
 
         match self.exist_iter(&mut iter, value) {
             None => return match delete_type {
@@ -235,8 +236,9 @@ impl<'a, T> Dir<'a, T>
     }
 
     fn delete_in_dir(&self, cluster: u32) {
-        let offset = self.bpb.offset(cluster);
-        let mut iter = DirIter::new(offset, self.device);
+        let fat_offset = self.bpb.fat1();
+        let fat = FAT::new(cluster, self.device, fat_offset);
+        let mut iter = DirIter::new(self.device, fat, self.bpb);
         loop {
             if let Some(d) = iter.next() {
                 if d.is_dir() { self.delete_in_dir(d.cluster()); }
@@ -244,6 +246,7 @@ impl<'a, T> Dir<'a, T>
                 iter.previous();
                 iter.set_deleted();
                 iter.update();
+                iter.next();
             } else {
                 break;
             }
@@ -251,14 +254,13 @@ impl<'a, T> Dir<'a, T>
     }
 
     fn write_directory_item(&self, di: DirectoryItem) {
-        let offset = self.bpb.offset(self.detail.cluster());
-        let mut iter = DirIter::new(offset, self.device);
+        let mut iter = DirIter::new(self.device, self.fat, self.bpb);
         iter.find(|_| false);
         iter.update_item(&di.bytes());
         iter.update();
     }
 
-    fn clean_all_cluster_data(&self, cluster: u32) {
+    fn clean_cluster_data(&self, cluster: u32) {
         let spc = self.bpb.sector_per_cluster_usize();
         for i in 0..spc {
             let offset = self.bpb.offset(cluster) + i * BUFFER_SIZE;
@@ -270,43 +272,69 @@ impl<'a, T> Dir<'a, T>
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct DirIter<T>
+pub struct DirIter<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
     device: T,
+    fat: FAT<T>,
+    bpb: &'a BIOSParameterBlock,
     offset: usize,
-    num_offset: usize,
+    sector_offset: usize,
     index: usize,
     buffer: [u8; BUFFER_SIZE],
 }
 
-impl<T> DirIter<T>
+impl<'a, T> DirIter<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
-    pub(crate) fn new(offset: usize, device: T) -> DirIter<T> {
+    pub(crate) fn new(device: T, fat: FAT<T>, bpb: &BIOSParameterBlock)
+                      -> DirIter<T> {
+        let mut fat = fat;
+        fat.next();
+
         DirIter::<T> {
             device,
-            offset,
-            num_offset: 0,
+            fat,
+            bpb,
+            offset: bpb.offset(fat.current_cluster),
+            sector_offset: 0,
             index: 0,
             buffer: [0; 512],
         }
     }
 
     fn offset_value(&self) -> usize {
-        self.offset + self.num_offset * BUFFER_SIZE
+        self.offset + self.sector_offset * BUFFER_SIZE
     }
 
     fn offset_index(&mut self) {
+        let spc = self.bpb.sector_per_cluster_usize();
+
         self.index += 32;
         if self.index % BUFFER_SIZE == 0 {
-            if self.index != 0 { self.num_offset += 1; }
+            self.sector_offset += 1;
             self.index = 0;
+        }
+
+        if self.sector_offset % spc == 0
+            && self.sector_offset != 0 {
+            if self.fat.next_is_none() {
+                self.sector_offset = spc;
+            } else {
+                self.fat.next();
+                self.offset = self.bpb.offset(self.fat.current_cluster);
+                self.sector_offset = 0;
+            }
         }
     }
 
+    fn is_end_sector(&self) -> bool {
+        let spc = self.bpb.sector_per_cluster_usize();
+        self.sector_offset == spc
+    }
+
     fn is_end(&self) -> bool {
-        self.buffer[self.index] == 0x00
+        self.is_end_sector() || self.buffer[self.index] == 0x00
     }
 
     fn is_special_item(&self) -> bool {
@@ -322,16 +350,35 @@ impl<T> DirIter<T>
     }
 
     pub(crate) fn update_item(&mut self, buf: &[u8]) {
-        self.buffer[self.index..self.index + 32].copy_from_slice(buf)
+        if self.is_end_sector() {
+            let blank_cluster = self.fat.blank_cluster();
+            self.clean_new_cluster_data(blank_cluster);
+            self.fat.write(blank_cluster, 0x0FFFFFFF);
+            self.fat.write(self.fat.current_cluster, blank_cluster);
+            self.fat.previous();
+            self.fat.next();
+            self.fat.next();
+            self.offset = self.bpb.offset(blank_cluster);
+            self.index = 0;
+            self.sector_offset = 0;
+            self.update_buffer();
+        }
+        self.buffer[self.index..self.index + 32].copy_from_slice(buf);
     }
 
     pub(crate) fn previous(&mut self) {
-        if self.index == 0 && self.num_offset != 0 {
+        if self.index == 0 && self.sector_offset != 0 {
             self.index = BUFFER_SIZE - 32;
-            self.num_offset -= 1;
+            self.sector_offset -= 1;
             self.update_buffer();
         } else if self.index != 0 {
             self.index -= 32;
+        } else {
+            let spc = self.bpb.sector_per_cluster_usize();
+            self.sector_offset = spc - 1;
+            self.index = BUFFER_SIZE - 32;
+            self.fat.previous();
+            self.update_buffer();
         }
     }
 
@@ -347,9 +394,19 @@ impl<T> DirIter<T>
                           self.offset_value(),
                           1).unwrap();
     }
+
+    fn clean_new_cluster_data(&self, cluster: u32) {
+        let spc = self.bpb.sector_per_cluster_usize();
+        for i in 0..spc {
+            let offset = self.bpb.offset(cluster) + i * BUFFER_SIZE;
+            self.device.write(&[0; BUFFER_SIZE],
+                              offset,
+                              1).unwrap();
+        }
+    }
 }
 
-impl<T> Iterator for DirIter<T>
+impl<'a, T> Iterator for DirIter<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
     type Item = DirectoryItem;

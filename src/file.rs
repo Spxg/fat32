@@ -199,8 +199,8 @@ impl<'a, T> File<'a, T>
     }
 
     fn update_length(&mut self, length: usize) {
-        let offset = self.bpb.offset(self.dir_cluster);
-        let mut iter = DirIter::new(offset, self.device);
+        let fat = FAT::new(self.dir_cluster, self.device, self.bpb.fat1());
+        let mut iter = DirIter::new(self.device, fat, self.bpb);
         iter.find(|d| {
             !d.is_deleted() && !d.is_lfn() && d.cluster() == self.detail.cluster()
         }).unwrap();

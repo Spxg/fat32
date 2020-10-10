@@ -9,6 +9,7 @@ pub struct FAT<T>
     device: T,
     fat_offset: usize,
     start_cluster: u32,
+    previous_cluster: u32,
     pub(crate) current_cluster: u32,
     next_cluster: Option<u32>,
     buffer: [u8; BUFFER_SIZE],
@@ -22,6 +23,7 @@ impl<T> FAT<T>
             device,
             fat_offset,
             start_cluster: cluster,
+            previous_cluster: 0,
             current_cluster: 0,
             next_cluster: None,
             buffer: [0; 512],
@@ -69,6 +71,17 @@ impl<T> FAT<T>
         self.start_cluster = start_cluster;
     }
 
+    pub(crate) fn previous(&mut self) {
+        if self.current_cluster != 0 {
+            self.next_cluster = Some(self.current_cluster);
+            self.current_cluster = self.previous_cluster;
+        }
+    }
+
+    pub(crate) fn next_is_none(&self) -> bool {
+        self.next_cluster.is_none()
+    }
+
     fn current_cluster_usize(&self) -> usize {
         self.current_cluster as usize
     }
@@ -85,6 +98,7 @@ impl<T> Iterator for FAT<T>
         } else {
             let next_cluster = self.next_cluster;
             if next_cluster.is_some() {
+                self.previous_cluster = self.current_cluster;
                 self.current_cluster = next_cluster.unwrap();
             } else {
                 return None;
