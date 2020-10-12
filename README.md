@@ -6,4 +6,5 @@ TodoList
 - [x] Create File AND Dir
 - [x] Write(OverWritten and Append)
 - [x] Create File AND Dir Over Cluster
-- [ ] ADD `.` AND `..` Item
+- [x] ADD `.` AND `..` Item
+- [ ] Document
