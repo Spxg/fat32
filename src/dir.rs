@@ -193,7 +193,10 @@ impl<'a, T> Dir<'a, T>
             }
         }
 
-        if let OpType::Dir = create_type { self.clean_cluster_data(blank_cluster); }
+        if let OpType::Dir = create_type {
+            self.clean_cluster_data(blank_cluster);
+            self.add_dot_item(blank_cluster);
+        }
         Ok(())
     }
 
@@ -268,6 +271,21 @@ impl<'a, T> Dir<'a, T>
                               offset,
                               1).unwrap();
         }
+    }
+
+    fn add_dot_item(&self, cluster: u32) {
+        let mut buffer = [0; BUFFER_SIZE];
+
+        let mut value = [0x20; 11];
+        value[0] = b'.';
+        let mut di = DirectoryItem::new_sfn_bytes(cluster, &value, OpType::Dir);
+        buffer[0..32].copy_from_slice(&di.bytes());
+        value[1] = b'.';
+        di = DirectoryItem::new_sfn_bytes(self.detail.cluster(), &value, OpType::Dir);
+        buffer[32..64].copy_from_slice(&di.bytes());
+
+        let offset = self.bpb.offset(cluster);
+        self.device.write(&buffer, offset, 1).unwrap();
     }
 }
 
