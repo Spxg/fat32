@@ -338,7 +338,10 @@ impl<'a, T> DirIter<'a, T>
     }
 
     fn is_special_item(&self) -> bool {
-        self.buffer[self.index] == 0x2E
+        self.buffer[self.index] == 0x2E && self.buffer[self.index + 1] == 0x20
+            || self.buffer[self.index] == 0x2E
+                && self.buffer[self.index + 1] == 0x2E
+                && self.buffer[self.index + 2] == 0x20
     }
 
     fn get_part_buf(&mut self) -> &[u8] {
