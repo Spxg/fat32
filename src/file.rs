@@ -226,6 +226,9 @@ impl<'a, T> File<'a, T>
         let spc = self.bpb.sector_per_cluster_usize();
         let mut buf_write = [0; BUFFER_SIZE];
         let mut write_count = get_needed_sector(buf.len());
+        let op = |start: usize, sectors: usize| -> &[u8] {
+            &buf[start * BUFFER_SIZE..(start + sectors) * BUFFER_SIZE]
+        };
 
         let mut w = 0;
         fat.map(|f| {
@@ -236,13 +239,22 @@ impl<'a, T> File<'a, T>
                 write_count
             };
 
-            for sector in 0..count {
-                self.buf_write(buf, w, &mut buf_write);
-                let offset = self.bpb.offset(f.current_cluster) + sector * BUFFER_SIZE;
-                self.device.write(&buf_write,
+            if count == spc {
+                let offset = self.bpb.offset(f.current_cluster);
+                self.device.write(op(w, count),
                                   offset,
+                                  count).unwrap();
+                w += count;
+            } else {
+                let offset = self.bpb.offset(f.current_cluster);
+                self.device.write(op(w, count - 1),
+                                  offset,
+                                  count - 1).unwrap();
+                w += count - 1;
+                self.buf_write(&buf, w, &mut buf_write);
+                self.device.write(&buf_write,
+                                  offset + (count - 1) * BUFFER_SIZE,
                                   1).unwrap();
-                w += 1;
             }
         }).last();
     }
