@@ -155,16 +155,6 @@ mod fat32 {
         let test_dir = root.create_dir("test_dir");
         assert!(test_dir.is_ok());
 
-        // let f = root.create_file("firmware.backup");
-        // assert!(f.is_ok());
-
-        // let o = root.open_file("firmware.bin").unwrap();
-        // let mut b = root.open_file("firmware.backup").unwrap();
-        //
-        // for (buf, len) in o.read_per_sector() {
-        //     b.write(&buf[0..len], WriteType::Append).unwrap();
-        // }
-
         // cd test_dir
         let test_dir = root.cd("test_dir");
         assert!(test_dir.is_ok());
