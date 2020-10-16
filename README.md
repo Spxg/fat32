@@ -1,6 +1,6 @@
 # FAT32 FileSystem Library
 
-This is a simple fat32 filesystem library, which is `#![no_std]` and does not use `alloc`.
+This is FAT32 FileSystem Library, which is `#![no_std]` and does not use `alloc`.
  
 Test passed with [sdio_sdhc](https://github.com/play-stm32/sdio_sdhc) and WindowsAPI. 
 
