@@ -65,11 +65,12 @@ impl<T> Volume<T>
         }
     }
 
+    /// Get Volume Label
     pub fn volume_label(&self) -> &str {
         str::from_utf8(&self.bpb.volume_label).unwrap()
     }
 
-    /// Cd root_dir, its Dir<T> type
+    /// Cd root dir, its Dir<T> Type
     pub fn root_dir(&self) -> Dir<T> {
         Dir::<T> {
             device: self.device,
