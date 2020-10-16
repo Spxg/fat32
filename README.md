@@ -1,4 +1,5 @@
 # FAT32 FileSystem Library
+[![crates.io version](https://img.shields.io/crates/v/fat32.svg)](https://crates.io/crates/fat32)
 
 This is FAT32 FileSystem Library, which is `#![no_std]` and does not use `alloc`.
  
