@@ -13,6 +13,7 @@ use crate::directory_item::NameType;
 use crate::file::File;
 use crate::fat::FAT;
 
+/// Define DirError
 #[derive(Debug, PartialOrd, PartialEq)]
 pub enum DirError {
     NoMatchDir,
@@ -22,6 +23,7 @@ pub enum DirError {
     FileHasExist,
 }
 
+/// Define Operation Type
 #[derive(Clone, Copy)]
 pub enum OpType {
     Dir,
@@ -41,22 +43,27 @@ pub struct Dir<'a, T>
 impl<'a, T> Dir<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
+    /// Delete Dir
     pub fn delete_dir(&mut self, dir: &str) -> Result<(), DirError> {
         self.delete(dir, OpType::Dir)
     }
 
+    /// Delete File
     pub fn delete_file(&mut self, file: &str) -> Result<(), DirError> {
         self.delete(file, OpType::File)
     }
 
+    /// Create Dir
     pub fn create_dir(&mut self, dir: &str) -> Result<(), DirError> {
         self.create(dir, OpType::Dir)
     }
 
+    /// Create File
     pub fn create_file(&mut self, file: &str) -> Result<(), DirError> {
         self.create(file, OpType::File)
     }
 
+    /// Open File, Return File<T> Type
     pub fn open_file(&self, file: &str) -> Result<File<'a, T>, DirError> {
         if is_illegal(file) { return Err(DirError::IllegalChar); }
         match self.exist(file) {
@@ -78,6 +85,7 @@ impl<'a, T> Dir<'a, T>
         }
     }
 
+    /// Cd Dir, Return Dir<T> Type
     pub fn cd(&self, dir: &str) -> Result<Dir<'a, T>, DirError> {
         if is_illegal(dir) { return Err(DirError::IllegalChar); }
         match self.exist(dir) {
@@ -98,6 +106,7 @@ impl<'a, T> Dir<'a, T>
         }
     }
 
+    /// Check if file or dir is exist or not, Return Option Type
     pub fn exist(&self, value: &str) -> Option<DirectoryItem> {
         let mut iter = DirIter::new(self.device, self.fat, self.bpb);
 
@@ -107,6 +116,7 @@ impl<'a, T> Dir<'a, T>
         }
     }
 
+    /// Check if file or dir is exist or not through DirIter<T>, Return Option Type
     pub fn exist_iter(&self, iter: &mut DirIter<T>, value: &str) -> Option<DirectoryItem> {
         match sfn_or_lfn(value) {
             NameType::SFN => iter.find(|d| d.sfn_equal(value)),
@@ -114,6 +124,7 @@ impl<'a, T> Dir<'a, T>
         }
     }
 
+    /// Find Long File Name Item, Return Option Type
     fn find_lfn(&self, iter: &mut DirIter<T>, value: &str) -> Option<DirectoryItem> {
         let count = get_count_of_lfn(value);
         let mut index = get_lfn_index(value, count);
@@ -146,6 +157,7 @@ impl<'a, T> Dir<'a, T>
         if has_match { iter.next() } else { None }
     }
 
+    /// Basic Create Function
     fn create(&mut self, value: &str, create_type: OpType) -> Result<(), DirError> {
         if is_illegal(value) { return Err(DirError::IllegalChar); }
         if let Some(_) = self.exist(value) {
@@ -200,6 +212,7 @@ impl<'a, T> Dir<'a, T>
         Ok(())
     }
 
+    /// Basic Delete Function
     fn delete(&mut self, value: &str, delete_type: OpType) -> Result<(), DirError> {
         if is_illegal(value) { return Err(DirError::IllegalChar); }
         let mut iter = DirIter::new(self.device, self.fat, self.bpb);
@@ -238,6 +251,7 @@ impl<'a, T> Dir<'a, T>
         Ok(())
     }
 
+    /// Delete ALL File And Dir Which Included Deleted Dir
     fn delete_in_dir(&self, cluster: u32) {
         let fat_offset = self.bpb.fat1();
         let fat = FAT::new(cluster, self.device, fat_offset);
@@ -256,6 +270,7 @@ impl<'a, T> Dir<'a, T>
         }
     }
 
+    /// Write Directory Item
     fn write_directory_item(&self, di: DirectoryItem) {
         let mut iter = DirIter::new(self.device, self.fat, self.bpb);
         iter.find(|_| false);
@@ -263,6 +278,7 @@ impl<'a, T> Dir<'a, T>
         iter.update();
     }
 
+    /// Clean Sectors In Cluster, To Avoid Dirty Data
     fn clean_cluster_data(&self, cluster: u32) {
         let spc = self.bpb.sector_per_cluster_usize();
         for i in 0..spc {
@@ -273,6 +289,7 @@ impl<'a, T> Dir<'a, T>
         }
     }
 
+    /// Add '.' AND '..' Item
     fn add_dot_item(&self, cluster: u32) {
         let mut buffer = [0; BUFFER_SIZE];
 
@@ -289,6 +306,7 @@ impl<'a, T> Dir<'a, T>
     }
 }
 
+/// To Iterate Dir
 #[derive(Debug, Copy, Clone)]
 pub struct DirIter<'a, T>
     where T: BlockDevice + Clone + Copy,
@@ -371,6 +389,7 @@ impl<'a, T> DirIter<'a, T>
     }
 
     pub(crate) fn update_item(&mut self, buf: &[u8]) {
+        // append cluster if is dir end
         if self.is_end_sector() {
             let blank_cluster = self.fat.blank_cluster();
             self.clean_new_cluster_data(blank_cluster);
@@ -427,6 +446,7 @@ impl<'a, T> DirIter<'a, T>
     }
 }
 
+/// Implement Iterator For DirIter
 impl<'a, T> Iterator for DirIter<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
