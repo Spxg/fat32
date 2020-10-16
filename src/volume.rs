@@ -39,14 +39,14 @@ impl<T> Volume<T>
         let mut file_system = [0; 8];
         file_system.copy_from_slice(&buf[0x52..0x5A]);
 
-        // if not fat32 file system, panic
-        if !is_fat32(&file_system) { panic!("not fat32 file system"); }
-
         let bps = read_le_u16(&buf[0x0B..0x0D]);
         if bps as usize != BUFFER_SIZE {
             panic!("BUFFER_SIZE is {} Bytes, byte_per_sector is {} Bytes",
                    BUFFER_SIZE, bps);
         }
+
+        // if not fat32 file system, panic
+        if !is_fat32(&file_system) { panic!("not fat32 file system"); }
 
         Volume::<T> {
             device,
