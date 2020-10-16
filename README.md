@@ -76,7 +76,10 @@ fat32 = "0.2"
 If your card block is other size, like 1024 Bytes
 
 ```
-fat32 = { version = "0.2", features = ["1024"] }
+[dependencies.fat32]
+version = "0.2"
+default-features = false
+features = ["1024"]
 ```
 
 Then, you can do some tests

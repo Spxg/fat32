@@ -26,7 +26,7 @@ impl<T> FAT<T>
             previous_cluster: 0,
             current_cluster: 0,
             next_cluster: None,
-            buffer: [0; 512],
+            buffer: [0; BUFFER_SIZE],
         }
     }
 

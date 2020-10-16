@@ -335,7 +335,7 @@ impl<'a, T> DirIter<'a, T>
             offset: bpb.offset(fat.current_cluster),
             sector_offset: 0,
             index: 0,
-            buffer: [0; 512],
+            buffer: [0; BUFFER_SIZE],
         }
     }
 

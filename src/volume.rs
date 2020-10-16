@@ -41,7 +41,8 @@ impl<T> Volume<T>
 
         let bps = read_le_u16(&buf[0x0B..0x0D]);
         if bps as usize != BUFFER_SIZE {
-            panic!("BUFFER_SIZE is {} Bytes, byte_per_sector is {} Bytes",
+            panic!("BUFFER_SIZE is {} Bytes, byte_per_sector is {} Bytes\
+            , please edit features",
                    BUFFER_SIZE, bps);
         }
 
