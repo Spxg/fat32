@@ -8,8 +8,6 @@ pub mod directory_item;
 pub mod file;
 pub mod fat;
 
-const BUFFER_SIZE: usize = 512;
-
 #[cfg(feature = "512")]
 const BUFFER_SIZE: usize = 512;
 #[cfg(feature = "1024")]
