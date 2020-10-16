@@ -3,10 +3,10 @@ name = "fat32"
 version = "0.2.0"
 authors = ["spxg <itsme@unsafe.me>"]
 edition = "2018"
-description = "A simple fat32 filesystem"
+description = "FAT32 FileSystem Library"
 keywords = ["sdcard", "fat", "embedded", "stm32f407", "filesystem"]
 categories = ["embedded", "no-std"]
-repository = "https://github.com/play-stm32/fat32"
+repository = "https://github.com/Spxg/fat32"
 readme = "README.md"
 license = "MIT"
 
@@ -14,9 +14,8 @@ license = "MIT"
 version = "0.3"
 features = ["fileapi", "winioctl", "ioapiset"]
 
-[dependencies.block_device]
-version = "0.1"
-path = "../block_device"
+[dependencies]
+block_device = "0.1"
 
 [features]
 default = ["512"]
