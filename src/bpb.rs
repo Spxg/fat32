@@ -22,11 +22,12 @@ impl BIOSParameterBlock {
             * (self.byte_per_sector as usize)
     }
 
-    /// Get fat1 offset
+    /// Get FAT1 Offset
     pub(crate) fn fat1(&self) -> usize {
         (self.reserved_sector as usize) * (self.byte_per_sector as usize)
     }
 
+    /// Get sector_per_cluster_usize as usize value
     pub(crate) fn sector_per_cluster_usize(&self) -> usize {
         self.sector_per_cluster as usize
     }
