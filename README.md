@@ -4,11 +4,23 @@ This is a simple fat32 filesystem library, which is `#![no_std]` and does not us
  
 Test passed with [sdio_sdhc](https://github.com/play-stm32/sdio_sdhc) and WindowsAPI. 
 
-## Support 
+## Supported Features
 - [x] Read
 - [x] Create File AND Dir
 - [x] Write(OverWritten and Append)
 - [x] Delete File AND DIR
+
+## Questions
+### My Device Support `std`, Can I Use This Crate?
+Of course you can, but I don't recommend it. You should use `std::fs::File` OR other crates.
+
+### Why Do You Write This Crate?
+In order to support devices and environment which don't have `std`, like
+* Embedded Device
+* Bootloader
+
+### Have More Examples?
+* [Embedded Device's Bootloader](https://github.com/play-stm32/bootloader)
 
 ## How To Test (Only Windows)
 * EDIT mount() function in lib.rs, change disk like `\\\\.\\E:`
