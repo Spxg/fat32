@@ -17,3 +17,10 @@ features = ["fileapi", "winioctl", "ioapiset"]
 [dependencies.block_device]
 version = "0.1"
 path = "../block_device"
+
+[features]
+default = ["512"]
+512 = []
+1024 = []
+2048 = []
+4086 = []
