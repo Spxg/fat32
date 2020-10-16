@@ -28,7 +28,7 @@ pub struct Volume<T>
 impl<T> Volume<T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
-    /// get volume
+    /// Make volume from device which implement BlockDevice
     pub fn new(device: T) -> Volume<T> {
         let mut buf = [0; BUFFER_SIZE];
         device.read(&mut buf, 0, 1).unwrap();
@@ -39,6 +39,7 @@ impl<T> Volume<T>
         let mut file_system = [0; 8];
         file_system.copy_from_slice(&buf[0x52..0x5A]);
 
+        // if not fat32 file system, panic
         if !is_fat32(&file_system) { panic!("not fat32 file system"); }
 
         let bps = read_le_u16(&buf[0x0B..0x0D]);
@@ -68,7 +69,7 @@ impl<T> Volume<T>
         str::from_utf8(&self.bpb.volume_label).unwrap()
     }
 
-    /// into root_dir
+    /// Cd root_dir, its Dir<T> type
     pub fn root_dir(&self) -> Dir<T> {
         Dir::<T> {
             device: self.device,
@@ -81,6 +82,7 @@ impl<T> Volume<T>
     }
 }
 
+/// implement Debug Display for Volume
 impl<T> Debug for Volume<T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
