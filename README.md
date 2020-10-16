@@ -70,15 +70,15 @@ fat32 = { version = "0.2", features = ["1024"] }
 Then, you can do some tests
 
 ```rust
-// Card from sdio_sdhc
+// Card from sdio_sdhc crate
 let card = Card::init().unwrap();
-// Volume from fat32
+// Volume from fat32 crate
 let cont = Volume::new(card);
-// into root dir
+// cd root dir
 let root = cont.root_dir();
 // create file named test.txt
 root.create_file("test.txt").unwrap();
-// load file
+// open file
 let mut file = root.open_file("test.txt").unwrap();
 // write buffer to file
 file.write(&[80; 1234]).unwrap();
