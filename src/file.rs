@@ -129,7 +129,7 @@ impl<'a, T> File<'a, T>
         }
     }
 
-    ///
+    /// Get Clusters The File Has
     fn num_cluster(&self, length: usize) -> usize {
         let spc = self.bpb.sector_per_cluster_usize();
         let cluster_size = spc * BUFFER_SIZE;
@@ -140,6 +140,7 @@ impl<'a, T> File<'a, T>
         }
     }
 
+    /// Write Buffer from one to another one
     fn buf_write(&self, from: &[u8], value: usize, to: &mut [u8]) {
         let index = value * BUFFER_SIZE;
         let index_end = index + BUFFER_SIZE;
@@ -151,6 +152,7 @@ impl<'a, T> File<'a, T>
         }
     }
 
+    /// Fill Left Sector
     fn fill_left_sector(&self, buf: &[u8], cluster: u32) -> (bool, usize) {
         let spc = self.bpb.sector_per_cluster_usize();
         let length = self.detail.length().unwrap();
@@ -205,6 +207,7 @@ impl<'a, T> File<'a, T>
         (false, 0)
     }
 
+    /// Update File Length
     fn update_length(&mut self, length: usize) {
         let fat = FAT::new(self.dir_cluster, self.device, self.bpb.fat1());
         let mut iter = DirIter::new(self.device, fat, self.bpb);
@@ -218,6 +221,7 @@ impl<'a, T> File<'a, T>
         iter.update();
     }
 
+    /// Write Blank FAT
     fn write_blank_fat(&mut self, num_cluster: usize) {
         for n in 0..num_cluster {
             let bl1 = self.fat.blank_cluster();
@@ -229,6 +233,7 @@ impl<'a, T> File<'a, T>
         }
     }
 
+    /// Basic Write Function
     fn _write(&self, buf: &[u8], fat: &FAT<T>) {
         let spc = self.bpb.sector_per_cluster_usize();
         let mut buf_write = [0; BUFFER_SIZE];
