@@ -7,12 +7,14 @@ use crate::BUFFER_SIZE;
 use crate::dir::DirIter;
 use crate::tool::get_needed_sector;
 
+/// Define FileError
 #[derive(Debug)]
 pub enum FileError {
     BufTooSmall,
     WriteError,
 }
 
+/// Define WriteType
 pub enum WriteType {
     OverWritten,
     Append,
@@ -29,6 +31,7 @@ pub struct File<'a, T>
     pub(crate) fat: FAT<T>,
 }
 
+/// To Read File Per Sector By Iterator
 pub struct ReadIter<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
@@ -44,6 +47,7 @@ pub struct ReadIter<'a, T>
 impl<'a, T> File<'a, T>
     where T: BlockDevice + Clone + Copy,
           <T as BlockDevice>::Error: core::fmt::Debug {
+    /// Read File To Buffer, Return File Length
     pub fn read(&self, buf: &mut [u8]) -> Result<usize, FileError> {
         let length = self.detail.length().unwrap();
         let spc = self.bpb.sector_per_cluster_usize();
@@ -71,6 +75,7 @@ impl<'a, T> File<'a, T>
         Ok(length)
     }
 
+    /// Write Data To File, Using Append OR OverWritten
     pub fn write(&mut self, buf: &[u8], write_type: WriteType) -> Result<(), FileError> {
         let num_cluster = match write_type {
             WriteType::OverWritten => self.num_cluster(buf.len()),
@@ -110,6 +115,7 @@ impl<'a, T> File<'a, T>
         Ok(())
     }
 
+    /// Read Per Sector, Return ReadIter
     pub fn read_per_sector(&self) -> ReadIter<T> {
         let left_length = self.detail.length().unwrap();
         ReadIter::<T> {
@@ -123,6 +129,7 @@ impl<'a, T> File<'a, T>
         }
     }
 
+    ///
     fn num_cluster(&self, length: usize) -> usize {
         let spc = self.bpb.sector_per_cluster_usize();
         let cluster_size = spc * BUFFER_SIZE;
@@ -239,14 +246,20 @@ impl<'a, T> File<'a, T>
                 write_count
             };
 
+            let offset = self.bpb.offset(f.current_cluster);
             if count == spc {
-                let offset = self.bpb.offset(f.current_cluster);
-                self.device.write(op(w, count),
-                                  offset,
-                                  count).unwrap();
+                if (w + spc) * BUFFER_SIZE > buf.len() {
+                    self.buf_write(&buf, w, &mut buf_write);
+                    self.device.write(&buf_write,
+                                      offset,
+                                      1).unwrap();
+                } else {
+                    self.device.write(op(w, count),
+                                      offset,
+                                      count).unwrap();
+                }
                 w += count;
             } else {
-                let offset = self.bpb.offset(f.current_cluster);
                 self.device.write(op(w, count - 1),
                                   offset,
                                   count - 1).unwrap();
