@@ -1,3 +1,4 @@
+/// Define BIOS Parameters
 #[derive(Debug, Copy, Clone)]
 pub struct BIOSParameterBlock {
     pub(crate) byte_per_sector: u16,
@@ -13,7 +14,7 @@ pub struct BIOSParameterBlock {
 }
 
 impl BIOSParameterBlock {
-    /// use cluster to get offset
+    /// Get the first sector offset bytes of the cluster from the cluster number
     pub(crate) fn offset(&self, cluster: u32) -> usize {
         ((self.reserved_sector as usize)
             + (self.num_fat as usize) * (self.sector_per_fat as usize)
@@ -21,7 +22,7 @@ impl BIOSParameterBlock {
             * (self.byte_per_sector as usize)
     }
 
-    /// get fat1 offset
+    /// Get fat1 offset
     pub(crate) fn fat1(&self) -> usize {
         (self.reserved_sector as usize) * (self.byte_per_sector as usize)
     }
