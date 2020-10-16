@@ -57,7 +57,14 @@ Now [sdio_sdhc](https://github.com/play-stm32/sdio_sdhc) library supported fat32
 Then, add fat32 library to your application
 
 ```
+# if no feature config, the BUFFER_SIZE is 512 Bytes
 fat32 = "0.2"
+```
+
+If your card block is other size, like 1024 Bytes
+
+```
+fat32 = { version = "0.2", features = ["1024"] }
 ```
 
 Then, you can do some tests
@@ -74,7 +81,7 @@ root.create_file("test.txt").unwrap();
 // load file
 let mut file = root.open_file("test.txt").unwrap();
 // write buffer to file
-file.write(&[80; 512 * 9]).unwrap();
+file.write(&[80; 1234]).unwrap();
 ```
 
-If all goes well, the file was created with 4608 Bytes in root dir.
+If all goes well, the file was created with 1234 Bytes in root dir.
