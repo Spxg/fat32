@@ -1,7 +1,7 @@
 use core::cmp;
 use block_device::BlockDevice;
 use crate::bpb::BIOSParameterBlock;
-use crate::directory_item::DirectoryItem;
+use crate::entry::Entry;
 use crate::fat::FAT;
 use crate::BUFFER_SIZE;
 use crate::dir::DirIter;
@@ -27,7 +27,7 @@ pub struct File<'a, T>
     pub(crate) device: T,
     pub(crate) bpb: &'a BIOSParameterBlock,
     pub(crate) dir_cluster: u32,
-    pub(crate) detail: DirectoryItem,
+    pub(crate) detail: Entry,
     pub(crate) fat: FAT<T>,
 }
 

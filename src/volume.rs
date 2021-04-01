@@ -13,7 +13,7 @@ use crate::tool::{
 use crate::bpb::BIOSParameterBlock;
 use crate::BUFFER_SIZE;
 use crate::dir::Dir;
-use crate::directory_item::DirectoryItem;
+use crate::entry::Entry;
 use crate::fat::FAT;
 
 #[derive(Copy, Clone)]
@@ -30,7 +30,7 @@ impl<T> Volume<T>
           <T as BlockDevice>::Error: core::fmt::Debug {
     /// Make volume from device which implement BlockDevice
     pub fn new(device: T) -> Volume<T> {
-        let mut buf = [0; BUFFER_SIZE];
+        let mut buf = [0; 512];
         device.read(&mut buf, 0, 1).unwrap();
 
         let mut volume_label = [0; 11];
@@ -76,7 +76,7 @@ impl<T> Volume<T>
         Dir::<T> {
             device: self.device,
             bpb: &self.bpb,
-            detail: DirectoryItem::root_dir(self.bpb.root_cluster),
+            detail: Entry::root_dir(self.bpb.root_cluster),
             fat: FAT::new(self.bpb.root_cluster,
                           self.device,
                           self.bpb.fat1()),
