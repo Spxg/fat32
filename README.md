@@ -1,3 +1,6 @@
+# News
+This crate has stopped updating, please use [rust-fatfs](https://github.com/rafalh/rust-fatfs).
+
 # FAT32 FileSystem Library
 [![crates.io version](https://img.shields.io/crates/v/fat32.svg)](https://crates.io/crates/fat32)
 
